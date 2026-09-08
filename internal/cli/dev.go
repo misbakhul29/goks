@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html"
 	"log"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -24,9 +25,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func getFreePort(startPort int) int {
-	// A simple heuristic for now
-	return startPort + 1
+func getFreePort() int {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return 49152
+	}
+	defer l.Close()
+	return l.Addr().(*net.TCPAddr).Port
 }
 
 // DevCmd returns the `goks dev` subcommand.
@@ -48,7 +53,7 @@ func DevCmd() *cobra.Command {
 			fmt.Println(color.CyanString("\n  ⚡ GoKS Dev Server"))
 			fmt.Printf("  %s %s\n\n", color.HiBlackString("app dir:"), appDir)
 
-			childPort := getFreePort(port)
+			childPort := getFreePort()
 			var buildErrorMutex sync.RWMutex
 			var buildError string
 

@@ -145,3 +145,25 @@ func TestReconcile_NewNil(t *testing.T) {
 		t.Fatalf("expected PatchRemove when new is nil")
 	}
 }
+
+func TestAny(t *testing.T) {
+	node := component.H("div", nil)
+	if component.Any(node) != node {
+		t.Fatalf("expected Any(*Node) to return the original node")
+	}
+
+	text := component.Any("hello")
+	if text.Type != component.NodeTypeText || text.Text != "hello" {
+		t.Fatalf("expected Any(string) to create text node")
+	}
+
+	num := component.Any(42)
+	if num.Type != component.NodeTypeText || num.Text != "42" {
+		t.Fatalf("expected Any(int) to create text node with stringified number")
+	}
+
+	if component.Any(nil) != nil {
+		t.Fatalf("expected Any(nil) to return nil")
+	}
+}
+

@@ -141,7 +141,7 @@ func parseNode(d *xml.Decoder) (string, error) {
 			if text != "" {
 				if strings.HasPrefix(text, "{") && strings.HasSuffix(text, "}") {
 					expr := text[1 : len(text)-1]
-					children = append(children, fmt.Sprintf("component.C(%s)", expr))
+					children = append(children, fmt.Sprintf("component.Any(%s)", expr))
 				} else {
 					children = append(children, fmt.Sprintf("%q", text))
 				}

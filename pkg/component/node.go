@@ -2,7 +2,10 @@
 // Components are written in Go and compiled to WebAssembly to run in the browser.
 package component
 
-import "reflect"
+import (
+	"fmt"
+	"reflect"
+)
 
 // NodeType represents the type of a virtual DOM node.
 type NodeType int
@@ -73,6 +76,23 @@ func Fragment(children ...*Node) *Node {
 	return &Node{
 		Type:     NodeTypeFragment,
 		Children: children,
+	}
+}
+
+// Any dynamically wraps any value into a Node.
+// It handles strings, primitives, Nodes, and Renderables.
+func Any(v any) *Node {
+	switch val := v.(type) {
+	case nil:
+		return nil
+	case *Node:
+		return val
+	case string:
+		return Text(val)
+	case Renderable:
+		return C(val)
+	default:
+		return Text(fmt.Sprintf("%v", val))
 	}
 }
 
