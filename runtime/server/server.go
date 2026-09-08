@@ -105,11 +105,10 @@ func (s *DevServer) Start() error {
 		srv.Shutdown(ctx)
 	}()
 
-	if os.Getenv("GOKS_CHILD_PORT") != "" {
-		log.Printf("[GoKS] ⚙️  Internal backend ready on port %d", s.cfg.Port)
-	} else {
-		log.Printf("[GoKS] 🚀 Dev server running at http://localhost:%d", s.cfg.Port)
+	if os.Getenv("GOKS_CHILD_PORT") == "" {
+		log.Printf("[GoKS] 🚀 Server running at http://localhost:%d", s.cfg.Port)
 	}
+
 	return srv.ListenAndServe()
 }
 
