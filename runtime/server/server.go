@@ -17,11 +17,11 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
-	"github.com/misbakhulmunir/goks/internal/livereload"
-	"github.com/misbakhulmunir/goks/internal/watcher"
-	"github.com/misbakhulmunir/goks/pkg/component"
-	"github.com/misbakhulmunir/goks/pkg/router"
-	"github.com/misbakhulmunir/goks/pkg/rpc"
+	"github.com/misbakhul29/goks/internal/livereload"
+	"github.com/misbakhul29/goks/internal/watcher"
+	"github.com/misbakhul29/goks/pkg/component"
+	"github.com/misbakhul29/goks/pkg/router"
+	"github.com/misbakhul29/goks/pkg/rpc"
 )
 
 func init() {

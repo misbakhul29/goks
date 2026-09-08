@@ -1,6 +1,6 @@
 package html
 
-import "github.com/misbakhulmunir/goks/pkg/component"
+import "github.com/misbakhul29/goks/pkg/component"
 
 // Div creates a <div> element.
 func Div(children ...any) *component.Node {

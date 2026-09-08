@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/fatih/color"
-	"github.com/misbakhulmunir/goks/internal/generator"
+	"github.com/misbakhul29/goks/internal/generator"
 	"github.com/spf13/cobra"
 )
 

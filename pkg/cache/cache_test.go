@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/misbakhulmunir/goks/pkg/cache"
+	"github.com/misbakhul29/goks/pkg/cache"
 )
 
 func TestMemoryCache_SetGet(t *testing.T) {

@@ -21,7 +21,7 @@ It embraces a "batteries-included" philosophy, providing everything needed to bu
 To install the `goks` CLI tool, run:
 
 ```bash
-go install github.com/misbakhulmunir/goks/cli/cmd/goks@latest
+go install github.com/misbakhul29/goks/cli/cmd/goks@latest
 ```
 
 *(Note: Ensure your `$(go env GOPATH)/bin` is in your system's `$PATH`)*
@@ -69,8 +69,8 @@ Build your UI entirely in Go:
 package app
 
 import (
-	"github.com/misbakhulmunir/goks/pkg/component"
-	"github.com/misbakhulmunir/goks/pkg/html"
+	"github.com/misbakhul29/goks/pkg/component"
+	"github.com/misbakhul29/goks/pkg/html"
 )
 
 type Page struct {
@@ -92,7 +92,7 @@ Interact with your database using the built-in ORM:
 ```go
 package models
 
-import "github.com/misbakhulmunir/goks/pkg/orm"
+import "github.com/misbakhul29/goks/pkg/orm"
 
 type User struct {
 	orm.Model // Adds ID, CreatedAt, UpdatedAt, DeletedAt
@@ -116,8 +116,8 @@ package api
 
 import (
 	"net/http"
-	"github.com/misbakhulmunir/goks/pkg/router"
-	"github.com/misbakhulmunir/goks/pkg/auth"
+	"github.com/misbakhul29/goks/pkg/router"
+	"github.com/misbakhul29/goks/pkg/auth"
 )
 
 func RegisterRoutes(r *router.Router) {

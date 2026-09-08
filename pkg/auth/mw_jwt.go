@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/misbakhulmunir/goks/pkg/router"
+	"github.com/misbakhul29/goks/pkg/router"
 )
 
 // DefaultJWT is the global JWT manager.

@@ -1,7 +1,7 @@
 package router
 
 import (
-	"github.com/misbakhulmunir/goks/pkg/component"
+	"github.com/misbakhul29/goks/pkg/component"
 )
 
 // CurrentPath is a global store holding the current URL path.

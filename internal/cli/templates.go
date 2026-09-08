@@ -7,14 +7,14 @@ var tmplGoMod = `module {{.Module}}
 
 go 1.22
 
-require github.com/misbakhulmunir/goks v0.1.0
+require github.com/misbakhul29/goks v0.1.0
 `
 
 var tmplLayout = `package app
 
 import (
-	"github.com/misbakhulmunir/goks/pkg/component"
-	"github.com/misbakhulmunir/goks/pkg/html"
+	"github.com/misbakhul29/goks/pkg/component"
+	"github.com/misbakhul29/goks/pkg/html"
 )
 
 // Layout acts as the root template (equivalent to layout.tsx)
@@ -33,8 +33,8 @@ func (l *Layout) Render() *component.Node {
 var tmplPage = `package app
 
 import (
-	"github.com/misbakhulmunir/goks/pkg/component"
-	"github.com/misbakhulmunir/goks/pkg/html"
+	"github.com/misbakhul29/goks/pkg/component"
+	"github.com/misbakhul29/goks/pkg/html"
 	c "{{.Module}}/app/components"
 )
 
@@ -56,8 +56,8 @@ func (p *Page) Render() *component.Node {
 var tmplHeroComponent = `package components
 
 import (
-	"github.com/misbakhulmunir/goks/pkg/component"
-	"github.com/misbakhulmunir/goks/pkg/html"
+	"github.com/misbakhul29/goks/pkg/component"
+	"github.com/misbakhul29/goks/pkg/html"
 )
 
 // Hero is a reusable hero section component.
@@ -92,8 +92,8 @@ package config
 
 import (
 	"{{.Module}}/middleware"
-	"github.com/misbakhulmunir/goks/runtime/server"
-	"github.com/misbakhulmunir/goks/pkg/router"
+	"github.com/misbakhul29/goks/runtime/server"
+	"github.com/misbakhul29/goks/pkg/router"
 )
 
 // ServerConfig returns the global server configuration.
@@ -117,7 +117,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/misbakhulmunir/goks/pkg/router"
+	"github.com/misbakhul29/goks/pkg/router"
 )
 
 // Logger is a sample global middleware that logs request execution time.
@@ -160,7 +160,7 @@ vendor/
 
 var tmplReadme = `# {{.AppName}}
 
-Built with [GoKS](https://github.com/misbakhulmunir/goks) — the fullstack Go framework.
+Built with [GoKS](https://github.com/misbakhul29/goks) — the fullstack Go framework.
 
 ## Getting started
 
@@ -175,7 +175,7 @@ goks build     # Build for production
 
 var tmplExampleModel = `package models
 
-import "github.com/misbakhulmunir/goks/pkg/orm"
+import "github.com/misbakhul29/goks/pkg/orm"
 
 // User is an example database model.
 // Embed orm.Model to get ID, CreatedAt, UpdatedAt, and soft-delete (DeletedAt) for free.
@@ -271,7 +271,7 @@ var tmplExampleAPI = `package api
 import (
 	"net/http"
 
-	"github.com/misbakhulmunir/goks/pkg/router"
+	"github.com/misbakhul29/goks/pkg/router"
 )
 
 // RegisterRoutes wires up all REST API routes onto the given router.
@@ -319,8 +319,8 @@ func ExampleHandler(ctx *router.Context) error {
 var tmplExampleComponent = `package components
 
 import (
-	"github.com/misbakhulmunir/goks/pkg/component"
-	"github.com/misbakhulmunir/goks/pkg/html"
+	"github.com/misbakhul29/goks/pkg/component"
+	"github.com/misbakhul29/goks/pkg/html"
 )
 
 // Button is a reusable UI component example.

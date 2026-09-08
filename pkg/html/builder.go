@@ -1,7 +1,7 @@
 package html
 
 import (
-	"github.com/misbakhulmunir/goks/pkg/component"
+	"github.com/misbakhul29/goks/pkg/component"
 )
 
 // Element is the core builder function that creates a component Node

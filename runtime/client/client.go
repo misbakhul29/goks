@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"syscall/js"
 
-	"github.com/misbakhulmunir/goks/pkg/component"
+	"github.com/misbakhul29/goks/pkg/component"
 )
 
 // App is the root GoKS client application.

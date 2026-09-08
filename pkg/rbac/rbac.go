@@ -4,8 +4,8 @@ package rbac
 import (
 	"net/http"
 
-	"github.com/misbakhulmunir/goks/pkg/auth"
-	"github.com/misbakhulmunir/goks/pkg/router"
+	"github.com/misbakhul29/goks/pkg/auth"
+	"github.com/misbakhul29/goks/pkg/router"
 )
 
 // Permission represents a named ability (e.g. "posts.create").

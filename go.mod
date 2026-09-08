@@ -1,4 +1,4 @@
-module github.com/misbakhulmunir/goks
+module github.com/misbakhul29/goks
 
 go 1.26.5
 

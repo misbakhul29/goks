@@ -122,7 +122,7 @@ func title(s string) string {
 
 var tmplGenModel = `package models
 
-import "github.com/misbakhulmunir/goks/pkg/orm"
+import "github.com/misbakhul29/goks/pkg/orm"
 
 // {{.Name}} is a GoKS ORM model.
 type {{.Name}} struct {
@@ -135,7 +135,7 @@ var tmplGenPage = `//go:build js && wasm
 
 package pages
 
-import "github.com/misbakhulmunir/goks/pkg/component"
+import "github.com/misbakhul29/goks/pkg/component"
 
 // {{.StructName}} is a GoKS page component.
 type {{.StructName}} struct {
@@ -155,7 +155,7 @@ var tmplGenComponent = `//go:build js && wasm
 
 package components
 
-import "github.com/misbakhulmunir/goks/pkg/component"
+import "github.com/misbakhul29/goks/pkg/component"
 
 // {{.Name}} is a reusable GoKS UI component.
 type {{.Name}} struct {

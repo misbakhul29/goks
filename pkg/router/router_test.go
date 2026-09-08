@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/misbakhulmunir/goks/pkg/router"
+	"github.com/misbakhul29/goks/pkg/router"
 )
 
 func TestRouter_StaticRoute(t *testing.T) {

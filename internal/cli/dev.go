@@ -17,9 +17,9 @@ import (
 	"time"
 
 	"github.com/fatih/color"
-	"github.com/misbakhulmunir/goks/internal/generator"
-	"github.com/misbakhulmunir/goks/internal/livereload"
-	"github.com/misbakhulmunir/goks/internal/watcher"
+	"github.com/misbakhul29/goks/internal/generator"
+	"github.com/misbakhul29/goks/internal/livereload"
+	"github.com/misbakhul29/goks/internal/watcher"
 	"github.com/spf13/cobra"
 )
 

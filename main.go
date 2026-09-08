@@ -8,7 +8,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
-	"github.com/misbakhulmunir/goks/internal/cli"
+	"github.com/misbakhul29/goks/internal/cli"
 )
 
 var banner = `

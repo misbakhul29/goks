@@ -3,7 +3,7 @@ package component_test
 import (
 	"testing"
 
-	"github.com/misbakhulmunir/goks/pkg/component"
+	"github.com/misbakhul29/goks/pkg/component"
 )
 
 // -----------------------------------------------------------------------
