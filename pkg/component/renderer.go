@@ -88,13 +88,36 @@ func (r *Renderer) createDOMNode(node *Node) js.Value {
 	}
 }
 
+var nextElementID int32 = 1
+var elementListeners = make(map[int32]map[string]js.Func)
+
 // applyProps sets attributes and event listeners on a DOM element.
 func (r *Renderer) applyProps(el js.Value, newProps, oldProps Props) {
+	idVal := el.Get("_goks_id")
+	var elID int32
+	if idVal.IsUndefined() || idVal.IsNull() {
+		elID = nextElementID
+		nextElementID++
+		el.Set("_goks_id", elID)
+	} else {
+		elID = int32(idVal.Int())
+	}
+
+	if elementListeners[elID] == nil {
+		elementListeners[elID] = make(map[string]js.Func)
+	}
+	listeners := elementListeners[elID]
+
 	// Remove old props that no longer exist
 	for k := range oldProps {
 		if _, exists := newProps[k]; !exists {
 			if strings.HasPrefix(k, "on") {
-				el.Call("removeEventListener", strings.ToLower(k[2:]), js.Null())
+				event := strings.ToLower(k[2:])
+				if oldJsFn, ok := listeners[event]; ok {
+					el.Call("removeEventListener", event, oldJsFn)
+					oldJsFn.Release()
+					delete(listeners, event)
+				}
 			} else {
 				el.Call("removeAttribute", k)
 			}
@@ -104,16 +127,28 @@ func (r *Renderer) applyProps(el js.Value, newProps, oldProps Props) {
 	// Set new / updated props
 	for k, v := range newProps {
 		if strings.HasPrefix(k, "on") {
-			// Event handler: onClick → "click"
 			event := strings.ToLower(k[2:])
+			
+			// Remove old listener if it exists to prevent stacking
+			if oldJsFn, ok := listeners[event]; ok {
+				el.Call("removeEventListener", event, oldJsFn)
+				oldJsFn.Release()
+				delete(listeners, event)
+			}
+
+			// Add new listener
+			var jsFn js.Func
 			if fn, ok := v.(func(js.Value, []js.Value) any); ok {
-				el.Call("addEventListener", event, js.FuncOf(fn))
+				jsFn = js.FuncOf(fn)
 			} else if fn, ok := v.(func()); ok {
-				el.Call("addEventListener", event, js.FuncOf(func(_ js.Value, _ []js.Value) any {
+				jsFn = js.FuncOf(func(_ js.Value, _ []js.Value) any {
 					fn()
 					return nil
-				}))
+				})
 			}
+			
+			listeners[event] = jsFn
+			el.Call("addEventListener", event, jsFn)
 		} else if k == "class" {
 			el.Set("className", fmt.Sprintf("%v", v))
 		} else if k == "style" {
@@ -144,6 +179,7 @@ func (r *Renderer) applyPatches(parent js.Value, patches []Patch, oldTree, newTr
 		case PatchRemove:
 			if p.Index < children.Length() {
 				child := children.Index(p.Index)
+				r.cleanupListeners(child)
 				targetParent.Call("removeChild", child)
 				r.triggerUnmount(p.OldNode)
 			}
@@ -152,6 +188,7 @@ func (r *Renderer) applyPatches(parent js.Value, patches []Patch, oldTree, newTr
 			newDom := r.createDOMNode(p.NewNode)
 			if p.Index < children.Length() {
 				old := children.Index(p.Index)
+				r.cleanupListeners(old)
 				targetParent.Call("replaceChild", newDom, old)
 				r.triggerUnmount(p.OldNode)
 			} else {
@@ -193,5 +230,32 @@ func (r *Renderer) triggerUnmount(node *Node) {
 	}
 	for _, child := range node.Children {
 		r.triggerUnmount(child)
+	}
+}
+
+// cleanupListeners removes event listeners and frees js.Func objects for a DOM node and its descendants.
+func (r *Renderer) cleanupListeners(el js.Value) {
+	if el.IsNull() || el.IsUndefined() {
+		return
+	}
+	idVal := el.Get("_goks_id")
+	if !idVal.IsUndefined() && !idVal.IsNull() {
+		elID := int32(idVal.Int())
+		if listeners, ok := elementListeners[elID]; ok {
+			for event, jsFn := range listeners {
+				el.Call("removeEventListener", event, jsFn)
+				jsFn.Release()
+			}
+			delete(elementListeners, elID)
+		}
+	}
+	
+	// recursively cleanup children
+	children := el.Get("childNodes")
+	if !children.IsUndefined() && !children.IsNull() {
+		length := children.Length()
+		for i := 0; i < length; i++ {
+			r.cleanupListeners(children.Index(i))
+		}
 	}
 }
