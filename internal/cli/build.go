@@ -25,8 +25,8 @@ func BuildCmd() *cobra.Command {
 
 			fmt.Println(color.CyanString("\n  🔨 GoKS Production Build"))
 			
-			// Transpile .gox files to .go files before generating router
-			if err := compiler.TranspileDir(cwd); err != nil {
+			// Prepare workspace & transpile .gox files into .goks/workspace
+			if err := compiler.PrepareWorkspace(cwd); err != nil {
 				return err
 			}
 

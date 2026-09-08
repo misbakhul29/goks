@@ -210,8 +210,10 @@ func DevCmd() *cobra.Command {
 }
 
 func compileWasmAndServer(appDir string) ([]byte, error) {
-	// Transpile any .gox files to .go files
-	_ = compiler.TranspileDir(appDir)
+	// Prepare workspace & transpile .gox files into .goks/workspace
+	if err := compiler.PrepareWorkspace(appDir); err != nil {
+		return []byte(err.Error()), err
+	}
 
 	// Generate router logic & go.mod for Development
 	_ = generator.GenerateRouter(appDir, false)

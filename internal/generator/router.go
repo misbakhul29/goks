@@ -144,7 +144,7 @@ go 1.22
 require %s v0.0.0
 require github.com/misbakhul29/goks %s
 
-replace %s => ../../
+replace %s => ../workspace
 `, moduleName, getGoKSVersion(), moduleName)
 	
 	// If the user's go.mod has a replace for goks, we should copy it
@@ -174,8 +174,13 @@ replace %s => ../../
 func checkFiles(dir string, node *RouteNode) {
 	if _, err := os.Stat(filepath.Join(dir, "page.go")); err == nil {
 		node.HasPage = true
+	} else if _, err := os.Stat(filepath.Join(dir, "page.gox")); err == nil {
+		node.HasPage = true
 	}
+
 	if _, err := os.Stat(filepath.Join(dir, "layout.go")); err == nil {
+		node.HasLayout = true
+	} else if _, err := os.Stat(filepath.Join(dir, "layout.gox")); err == nil {
 		node.HasLayout = true
 	}
 }
