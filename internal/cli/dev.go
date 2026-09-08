@@ -49,6 +49,9 @@ func DevCmd() *cobra.Command {
 			if _, err := os.Stat(filepath.Join(appDir, "go.mod")); err != nil {
 				return fmt.Errorf("no go.mod found in %s — is this a GoKS project?", appDir)
 			}
+			if _, err := os.Stat(filepath.Join(appDir, "app")); err != nil {
+				return fmt.Errorf("folder 'app/' tidak ditemukan di %s — pastikan kamu sudah 'cd' ke folder aplikasi (misal: 'cd test') sebelum menjalankan 'goks dev'", appDir)
+			}
 
 			fmt.Println(color.CyanString("\n  ⚡ GoKS Dev Server"))
 			fmt.Printf("  %s %s\n\n", color.HiBlackString("app dir:"), appDir)

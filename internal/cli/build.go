@@ -23,6 +23,10 @@ func BuildCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cwd, _ := os.Getwd()
 
+			if _, err := os.Stat(filepath.Join(cwd, "app")); err != nil {
+				return fmt.Errorf("folder 'app/' tidak ditemukan di %s — pastikan kamu berada di dalam folder project GoKS sebelum menjalankan 'goks build'", cwd)
+			}
+
 			fmt.Println(color.CyanString("\n  🔨 GoKS Production Build"))
 			
 			// Prepare workspace & transpile .gox files into .goks/workspace
