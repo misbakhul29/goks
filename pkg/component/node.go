@@ -147,10 +147,21 @@ func Expand(n *Node, appRerender func()) *Node {
 		return nil
 	}
 
-	// Expand children
-	for i, c := range n.Children {
-		n.Children[i] = Expand(c, appRerender)
+	// Expand children and flatten fragments
+	var expandedChildren []*Node
+	for _, c := range n.Children {
+		child := Expand(c, appRerender)
+		if child == nil {
+			continue
+		}
+		if child.Type == NodeTypeFragment {
+			// Flatten fragment children directly into the parent
+			expandedChildren = append(expandedChildren, child.Children...)
+		} else {
+			expandedChildren = append(expandedChildren, child)
+		}
 	}
+	n.Children = expandedChildren
 
 	return n
 }

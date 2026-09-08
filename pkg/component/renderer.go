@@ -128,18 +128,23 @@ func (r *Renderer) applyProps(el js.Value, newProps, oldProps Props) {
 
 // applyPatches applies a list of patches to the real DOM.
 func (r *Renderer) applyPatches(parent js.Value, patches []Patch, oldTree, newTree *Node) {
-	children := parent.Get("childNodes")
-
 	for _, p := range patches {
+		targetParent := parent
+		for _, idx := range p.Path {
+			targetParent = targetParent.Get("childNodes").Index(idx)
+		}
+		
+		children := targetParent.Get("childNodes")
+
 		switch p.Type {
 		case PatchCreate:
 			newDom := r.createDOMNode(p.NewNode)
-			parent.Call("appendChild", newDom)
+			targetParent.Call("appendChild", newDom)
 
 		case PatchRemove:
 			if p.Index < children.Length() {
 				child := children.Index(p.Index)
-				parent.Call("removeChild", child)
+				targetParent.Call("removeChild", child)
 				r.triggerUnmount(p.OldNode)
 			}
 
@@ -147,10 +152,10 @@ func (r *Renderer) applyPatches(parent js.Value, patches []Patch, oldTree, newTr
 			newDom := r.createDOMNode(p.NewNode)
 			if p.Index < children.Length() {
 				old := children.Index(p.Index)
-				parent.Call("replaceChild", newDom, old)
+				targetParent.Call("replaceChild", newDom, old)
 				r.triggerUnmount(p.OldNode)
 			} else {
-				parent.Call("appendChild", newDom)
+				targetParent.Call("appendChild", newDom)
 			}
 
 		case PatchText:

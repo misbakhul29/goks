@@ -2,6 +2,8 @@
 // This runs on the WASM (browser) side to compute minimal DOM patches.
 package component
 
+import "strings"
+
 // PatchType describes the kind of DOM operation to perform.
 type PatchType int
 
@@ -21,52 +23,56 @@ type Patch struct {
 	NewNode *Node
 	Index   int    // Child index where the patch applies
 	Key     string // Key for keyed diffing
+	Path    []int  // Indices to traverse down from the root DOM element to the parent element of this node
 }
 
 // Reconcile computes the minimal set of patches to transform oldTree into newTree.
 // It returns a flat list of Patch operations.
 func Reconcile(old, new *Node) []Patch {
 	var patches []Patch
-	diff(&patches, old, new, 0)
+	diff(&patches, old, new, []int{}, 0)
 	return patches
 }
 
-func diff(patches *[]Patch, old, new *Node, index int) {
+func diff(patches *[]Patch, old, new *Node, path []int, index int) {
 	// Case 1: no old node → create new
 	if old == nil {
-		*patches = append(*patches, Patch{Type: PatchCreate, NewNode: new, Index: index})
+		*patches = append(*patches, Patch{Type: PatchCreate, NewNode: new, Index: index, Path: path})
 		return
 	}
 
 	// Case 2: no new node → remove old
 	if new == nil {
-		*patches = append(*patches, Patch{Type: PatchRemove, OldNode: old, Index: index})
+		*patches = append(*patches, Patch{Type: PatchRemove, OldNode: old, Index: index, Path: path})
 		return
 	}
 
 	// Case 3: both are text nodes
 	if old.Type == NodeTypeText && new.Type == NodeTypeText {
 		if old.Text != new.Text {
-			*patches = append(*patches, Patch{Type: PatchText, OldNode: old, NewNode: new, Index: index})
+			*patches = append(*patches, Patch{Type: PatchText, OldNode: old, NewNode: new, Index: index, Path: path})
 		}
 		return
 	}
 
 	// Case 4: different types or different tags → replace
 	if old.Type != new.Type || old.Tag != new.Tag {
-		*patches = append(*patches, Patch{Type: PatchReplace, OldNode: old, NewNode: new, Index: index})
+		*patches = append(*patches, Patch{Type: PatchReplace, OldNode: old, NewNode: new, Index: index, Path: path})
 		return
 	}
 
 	// Case 5: same element type → diff props and recurse into children
 	if !propsEqual(old.Props, new.Props) {
-		*patches = append(*patches, Patch{Type: PatchUpdate, OldNode: old, NewNode: new, Index: index})
+		*patches = append(*patches, Patch{Type: PatchUpdate, OldNode: old, NewNode: new, Index: index, Path: path})
 	}
 
-	diffChildren(patches, old.Children, new.Children)
+	// Make sure we pass a distinct copy of path
+	childPath := append([]int(nil), path...)
+	childPath = append(childPath, index)
+	diffChildren(patches, old.Children, new.Children, childPath)
 }
 
-func diffChildren(patches *[]Patch, oldCh, newCh []*Node) {
+func diffChildren(patches *[]Patch, oldCh, newCh []*Node, path []int) {
 	// Key-based diffing for stable lists
 	oldKeyed := keyedMap(oldCh)
 	newKeyed := keyedMap(newCh)
@@ -88,18 +94,18 @@ func diffChildren(patches *[]Patch, oldCh, newCh []*Node) {
 		// Key-based matching
 		if n != nil && n.Key != "" {
 			if matched, ok := oldKeyed[n.Key]; ok {
-				diff(patches, matched, n, i)
+				diff(patches, matched, n, path, i)
 				continue
 			}
 		}
 		if o != nil && o.Key != "" {
 			if _, stillExists := newKeyed[o.Key]; !stillExists {
-				diff(patches, o, nil, i)
+				diff(patches, o, nil, path, i)
 				continue
 			}
 		}
 
-		diff(patches, o, n, i)
+		diff(patches, o, n, path, i)
 	}
 }
 
@@ -122,8 +128,13 @@ func propsEqual(a, b Props) bool {
 		if !ok {
 			return false
 		}
-		// Simple comparison; func values (event handlers) are never equal
-		// so we treat them as always changed — acceptable for now.
+
+		// Event handlers (functions) are uncomparable in Go and will panic on !=
+		// Treat them as always changed.
+		if strings.HasPrefix(k, "on") {
+			return false
+		}
+
 		if av != bv {
 			return false
 		}
