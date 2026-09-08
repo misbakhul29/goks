@@ -1,22 +1,22 @@
-# ⚡ GoKS (Go Kickstart)
+# GoKS (Go Kickstart)
 
-GoKS is a modern, full-stack Go framework designed for building web applications entirely in Go—from server-side routing and APIs to client-side UI via WebAssembly. No JavaScript required!
+GoKS is a modern, full-stack Go framework designed for building web applications entirely in Go—from server-side routing and APIs to client-side UI via WebAssembly. No JavaScript is required.
 
-It embraces a "batteries-included" philosophy, providing everything you need to build robust web apps quickly: a Next.js-like developer experience, built-in ORM, authentication, WebSocket support, and a powerful CLI.
+It embraces a "batteries-included" philosophy, providing everything needed to build robust web apps quickly: a seamless developer experience, built-in ORM, authentication, WebSocket support, and a powerful CLI.
 
-## ✨ Features
+## Features
 
-- **🚀 CLI Tooling:** `goks new`, `goks dev`, and `goks build` for scaffolding, hot-reloading (with an intelligent error overlay), and production builds.
-- **🛣️ File-System Routing:** Organize your routes in the `app/` directory similar to the Next.js App Router.
-- **🧩 Go-Native Virtual DOM:** Build your UI components using Go code (no HTML templates) with a chainable builder API (`html.Div()`, `html.H1()`, etc.).
-- **🔄 SSR & WASM:** Server-Side Rendering out of the box, with seamless handoff to WebAssembly on the client.
-- **🗃️ Built-in ORM:** Fluent query builder (`orm.Query[T]().Where(...)`), auto-timestamps, soft-deletes, and migrations for PostgreSQL, MySQL, and SQLite.
-- **🔐 Authentication & RBAC:** Session management, zero-dependency JWT, and Role-Based Access Control middleware.
-- **🔌 WebSockets:** Hub pattern, typed event routing (`hub.On("event")`), and room management.
-- **📦 Global State Management:** Reactive global store (`store.New()`) for your WASM apps.
-- **🛡️ Rich Middleware Stack:** Built-in `Logger`, `CORS`, `Secure`, `RequestID`, `Compress`, `MaxBytes`, and `Timeout`.
+- **CLI Tooling:** `goks new`, `goks dev`, and `goks build` for scaffolding, hot-reloading (with an intelligent error overlay), and production builds.
+- **File-System Routing:** Organize your routes in the `app/` directory similar to the Next.js App Router.
+- **Go-Native Virtual DOM:** Build your UI components using Go code (no HTML templates) with a chainable builder API (`html.Div()`, `html.H1()`, etc.).
+- **SSR & WASM:** Server-Side Rendering out of the box, with seamless handoff to WebAssembly on the client.
+- **Built-in ORM:** Fluent query builder (`orm.Query[T]().Where(...)`), auto-timestamps, soft-deletes, and migrations for PostgreSQL, MySQL, and SQLite.
+- **Authentication & RBAC:** Session management, zero-dependency JWT, and Role-Based Access Control middleware.
+- **WebSockets:** Hub pattern, typed event routing (`hub.On("event")`), and room management.
+- **Global State Management:** Reactive global store (`store.New()`) for your WASM apps.
+- **Rich Middleware Stack:** Built-in `Logger`, `CORS`, `Secure`, `RequestID`, `Compress`, `MaxBytes`, and `Timeout`.
 
-## 📦 Installation
+## Installation
 
 To install the `goks` CLI tool, run:
 
@@ -24,9 +24,9 @@ To install the `goks` CLI tool, run:
 go install github.com/misbakhulmunir/goks/cli/cmd/goks@latest
 ```
 
-*(Note: Make sure your `$(go env GOPATH)/bin` is in your system's `$PATH`)*
+*(Note: Ensure your `$(go env GOPATH)/bin` is in your system's `$PATH`)*
 
-## 🚀 Quick Start
+## Quick Start
 
 Create a new GoKS application:
 
@@ -43,15 +43,15 @@ goks dev
 ```
 
 Your app will be running at `http://localhost:3000`. 
-Try introducing a syntax error in your Go code and watch the Next.js-like error overlay appear in your browser automatically!
+The dev server includes a smart error overlay; if you introduce a compile error in your Go code, the browser will display the error directly and auto-recover when fixed.
 
-## 📂 Project Structure
+## Project Structure
 
-A scaffolded GoKS app comes with a clean, opinionated structure:
+A scaffolded GoKS app comes with an opinionated structure:
 
 - `app/` - Your UI components and file-system routes (`page.go`, `layout.go`).
 - `api/` - REST API handlers and routes (`routes.go`).
-- `components/` - Reusable UI components (Buttons, Cards, etc.).
+- `components/` - Reusable UI components.
 - `models/` - Database models and schemas.
 - `repositories/` - Data access layer (DB queries).
 - `services/` - Business logic and use cases.
@@ -59,7 +59,7 @@ A scaffolded GoKS app comes with a clean, opinionated structure:
 - `public/` - Static assets (CSS, images).
 - `config/` - App configuration (e.g., `goks.config.go`).
 
-## 📚 Examples
+## Examples
 
 ### 1. UI Components (`app/page.go`)
 
@@ -80,14 +80,14 @@ type Page struct {
 func (p *Page) Render() *component.Node {
 	return html.Main(
 		html.H1("Hello, GoKS!").Class("text-4xl font-bold"),
-		html.P("Welcome to my awesome app."),
+		html.P("Welcome to my application."),
 	).Class("container mx-auto p-8")
 }
 ```
 
 ### 2. ORM (`models/user.go`)
 
-Interact with your database easily:
+Interact with your database using the built-in ORM:
 
 ```go
 package models
@@ -130,10 +130,10 @@ func RegisterRoutes(r *router.Router) {
 }
 ```
 
-## 🤝 Contributing
+## Contributing
 
-Contributions are welcome! Feel free to open issues or submit pull requests.
+Contributions are welcome. Feel free to open issues or submit pull requests.
 
-## 📄 License
+## License
 
 MIT License. See [LICENSE](LICENSE) for details.
