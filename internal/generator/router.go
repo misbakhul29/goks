@@ -6,6 +6,7 @@ import (
 	"go/format"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"text/template"
 )
@@ -126,16 +127,25 @@ func GenerateRouter(appDir string) error {
 	return nil
 }
 
+func getGoKSVersion() string {
+	if info, ok := debug.ReadBuildInfo(); ok {
+		if info.Main.Version != "" && info.Main.Version != "(devel)" {
+			return info.Main.Version
+		}
+	}
+	return "v0.1.0"
+}
+
 func writeEntryGoMod(entryDir, appDir, moduleName string) error {
 	content := fmt.Sprintf(`module goks_entry
 
 go 1.22
 
 require %s v0.0.0
-require github.com/misbakhul29/goks v0.1.0
+require github.com/misbakhul29/goks %s
 
 replace %s => ../../
-`, moduleName, moduleName)
+`, moduleName, getGoKSVersion(), moduleName)
 	
 	// If the user's go.mod has a replace for goks, we should copy it
 	if b, err := os.ReadFile(filepath.Join(appDir, "go.mod")); err == nil {

@@ -7,7 +7,7 @@ var tmplGoMod = `module {{.Module}}
 
 go 1.22
 
-require github.com/misbakhul29/goks v0.1.0
+require github.com/misbakhul29/goks {{.Version}}
 `
 
 var tmplLayout = `package app

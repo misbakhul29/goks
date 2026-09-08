@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"text/template"
 
@@ -49,6 +50,7 @@ func scaffoldApp(name string) error {
 	data := map[string]string{
 		"AppName": name,
 		"Module":  "github.com/user/" + slug,
+		"Version": getGoKSVersion(),
 	}
 
 	files := map[string]string{
@@ -108,4 +110,13 @@ func renderTemplate(dst, name, tmplStr string, data any) error {
 	}
 	defer f.Close()
 	return t.Execute(f, data)
+}
+
+func getGoKSVersion() string {
+	if info, ok := debug.ReadBuildInfo(); ok {
+		if info.Main.Version != "" && info.Main.Version != "(devel)" {
+			return info.Main.Version
+		}
+	}
+	return "v0.1.0"
 }
