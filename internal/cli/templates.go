@@ -24,9 +24,11 @@ type Layout struct {
 }
 
 func (l *Layout) Render() *component.Node {
-	return html.Div(
-		component.C(l.Children),
-	).Class("antialiased")
+	return (
+		<div class="antialiased">
+			{l.Children}
+		</div>
+	)
 }
 `
 
@@ -44,12 +46,11 @@ type Page struct {
 }
 
 func (p *Page) Render() *component.Node {
-	return html.Main(
-		component.C(&c.Hero{
-			Title:    "Welcome to {{.AppName}}",
-			Subtitle: "Built with GoKS + Tailwind CSS v4",
-		}),
-	).Class("min-h-screen bg-white dark:bg-slate-900")
+	return (
+		<main class="min-h-screen bg-white dark:bg-slate-900">
+			<c.Hero Title="Welcome to {{.AppName}}" Subtitle="Built with GoKS + Tailwind CSS v4" />
+		</main>
+	)
 }
 `
 
@@ -68,14 +69,16 @@ type Hero struct {
 }
 
 func (h *Hero) Render() *component.Node {
-	return html.Div(
-		html.H1(h.Title).Class("text-5xl font-bold tracking-tight mb-4"),
-		html.P(h.Subtitle).Class("text-xl text-slate-600 dark:text-slate-400 mb-10 max-w-2xl text-center"),
-		html.Div(
-			html.Button("Get Started").Class("px-5 py-2.5 bg-slate-900 dark:bg-slate-50 text-white dark:text-slate-900 font-medium rounded-lg hover:bg-slate-800 dark:hover:bg-slate-200 transition-colors"),
-			html.Button("Documentation").Class("px-5 py-2.5 bg-transparent border border-slate-300 dark:border-slate-700 font-medium rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"),
-		).Class("flex gap-4"),
-	).Class("flex flex-col items-center justify-center min-h-screen text-slate-900 dark:text-slate-50 p-8 transition-colors duration-300")
+	return (
+		<div class="flex flex-col items-center justify-center min-h-screen text-slate-900 dark:text-slate-50 p-8 transition-colors duration-300">
+			<h1 class="text-5xl font-bold tracking-tight mb-4">{h.Title}</h1>
+			<p class="text-xl text-slate-600 dark:text-slate-400 mb-10 max-w-2xl text-center">{h.Subtitle}</p>
+			<div class="flex gap-4">
+				<button class="px-5 py-2.5 bg-slate-900 dark:bg-slate-50 text-white dark:text-slate-900 font-medium rounded-lg hover:bg-slate-800 dark:hover:bg-slate-200 transition-colors">Get Started</button>
+				<button class="px-5 py-2.5 bg-transparent border border-slate-300 dark:border-slate-700 font-medium rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">Documentation</button>
+			</div>
+		</div>
+	)
 }
 `
 
@@ -326,14 +329,11 @@ import (
 // Button is a reusable UI component example.
 // Props are simply struct fields. Pass them via component.C() in a page:
 //
-//	component.C(&components.Button{
-//	    Label:   "Click me",
-//	    Variant: "primary",
-//	})
+//	<components.Button Label="Click me" Variant="primary" />
 //
 // You can also use html.* directly without wrapping in a component:
 //
-//	html.Button("Click me").Class("px-4 py-2 bg-blue-600 text-white rounded")
+//	<button class="px-4 py-2 bg-blue-600 text-white rounded">Click me</button>
 type Button struct {
 	component.ComponentBase
 	Label   string
@@ -347,6 +347,8 @@ func (b *Button) Render() *component.Node {
 	} else {
 		class += " border border-slate-300 hover:bg-slate-50"
 	}
-	return html.Button(b.Label).Class(class)
+	return (
+		<button class="{class}">{b.Label}</button>
+	)
 }
 `

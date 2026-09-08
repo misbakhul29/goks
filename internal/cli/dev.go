@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/misbakhul29/goks/internal/compiler"
 	"github.com/misbakhul29/goks/internal/generator"
 	"github.com/misbakhul29/goks/internal/livereload"
 	"github.com/misbakhul29/goks/internal/watcher"
@@ -204,6 +205,9 @@ func DevCmd() *cobra.Command {
 }
 
 func compileWasmAndServer(appDir string) ([]byte, error) {
+	// Transpile any .gox files to .go files
+	_ = compiler.TranspileDir(appDir)
+
 	// Generate router logic & go.mod for Development
 	_ = generator.GenerateRouter(appDir, false)
 	

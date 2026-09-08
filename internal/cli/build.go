@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/misbakhul29/goks/internal/compiler"
 	"github.com/misbakhul29/goks/internal/generator"
 	"github.com/spf13/cobra"
 )
@@ -24,6 +25,11 @@ func BuildCmd() *cobra.Command {
 
 			fmt.Println(color.CyanString("\n  🔨 GoKS Production Build"))
 			
+			// Transpile .gox files to .go files before generating router
+			if err := compiler.TranspileDir(cwd); err != nil {
+				return err
+			}
+
 			// Generate App Router for Production
 			if err := generator.GenerateRouter(cwd, true); err != nil {
 				return err

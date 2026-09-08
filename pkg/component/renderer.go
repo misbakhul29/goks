@@ -11,35 +11,48 @@ import (
 	"syscall/js"
 )
 
-// Renderer applies a virtual DOM tree to the real browser DOM.
+// Renderer handles rendering a virtual DOM tree to the real DOM.
 type Renderer struct {
-	root    js.Value // The root DOM element (e.g., document.getElementById("app"))
-	current *Node    // The last rendered virtual DOM tree
+	rootElement js.Value
+	current     *Node
+	RootFiber   *FiberNode
 }
 
-// NewRenderer creates a renderer mounted at the given DOM selector.
-func NewRenderer(selector string) *Renderer {
-	doc := js.Global().Get("document")
-	el := doc.Call("querySelector", selector)
-	if el.IsNull() || el.IsUndefined() {
-		panic(fmt.Sprintf("goks: mount point '%s' not found in DOM", selector))
+// NewRenderer creates a new renderer attached to a root DOM element ID.
+func NewRenderer(rootID string) *Renderer {
+	document := js.Global().Get("document")
+	rootElement := document.Call("getElementById", rootID)
+	if rootElement.IsNull() {
+		panic("root element not found")
 	}
-	return &Renderer{root: el}
+
+	return &Renderer{
+		rootElement: rootElement,
+		RootFiber:   &FiberNode{},
+	}
 }
 
 // Render performs an initial render or reconciliation update.
 func (r *Renderer) Render(node *Node) {
+	// Reset RootFiber state for this render pass
+	r.RootFiber.ChildIndex = 0
+	r.RootFiber.HookIndex = 0
+
+	newTree := Expand(node, func() {
+		r.Render(node) // re-render callback
+	}, r.RootFiber)
+
 	if r.current == nil {
 		// Initial mount: clear root and create the full tree
-		r.root.Set("innerHTML", "")
-		domNode := r.createDOMNode(node)
-		r.root.Call("appendChild", domNode)
+		r.rootElement.Set("innerHTML", "")
+		domNode := r.createDOMNode(newTree)
+		r.rootElement.Call("appendChild", domNode)
 	} else {
 		// Incremental update: diff and patch
-		patches := Reconcile(r.current, node)
-		r.applyPatches(r.root, patches, r.current, node)
+		patches := Reconcile(r.current, newTree)
+		r.applyPatches(r.rootElement, patches, r.current, newTree)
 	}
-	r.current = node
+	r.current = newTree
 }
 
 // createDOMNode creates a real DOM node from a virtual node.
@@ -69,7 +82,7 @@ func (r *Renderer) createDOMNode(node *Node) js.Value {
 		for _, child := range node.Children {
 			el.Call("appendChild", r.createDOMNode(child))
 		}
-		
+
 		// Fire OnMount if it's attached to a component
 		if node.Component != nil {
 			if cb, ok := node.Component.(interface{ setMounted(bool) }); ok {
@@ -83,7 +96,7 @@ func (r *Renderer) createDOMNode(node *Node) js.Value {
 				}), 0)
 			}
 		}
-		
+
 		return el
 	}
 }
@@ -128,7 +141,7 @@ func (r *Renderer) applyProps(el js.Value, newProps, oldProps Props) {
 	for k, v := range newProps {
 		if strings.HasPrefix(k, "on") {
 			event := strings.ToLower(k[2:])
-			
+
 			// Remove old listener if it exists to prevent stacking
 			if oldJsFn, ok := listeners[event]; ok {
 				el.Call("removeEventListener", event, oldJsFn)
@@ -146,7 +159,7 @@ func (r *Renderer) applyProps(el js.Value, newProps, oldProps Props) {
 					return nil
 				})
 			}
-			
+
 			listeners[event] = jsFn
 			el.Call("addEventListener", event, jsFn)
 		} else if k == "class" {
@@ -168,7 +181,7 @@ func (r *Renderer) applyPatches(parent js.Value, patches []Patch, oldTree, newTr
 		for _, idx := range p.Path {
 			targetParent = targetParent.Get("childNodes").Index(idx)
 		}
-		
+
 		children := targetParent.Get("childNodes")
 
 		switch p.Type {
@@ -204,7 +217,7 @@ func (r *Renderer) applyPatches(parent js.Value, patches []Patch, oldTree, newTr
 			if p.Index < children.Length() {
 				el := children.Index(p.Index)
 				r.applyProps(el, p.NewNode.Props, p.OldNode.Props)
-				
+
 				// Fire OnUpdate if it has a component
 				if p.NewNode.Component != nil {
 					if up, ok := p.NewNode.Component.(Updater); ok {
@@ -249,7 +262,7 @@ func (r *Renderer) cleanupListeners(el js.Value) {
 			delete(elementListeners, elID)
 		}
 	}
-	
+
 	// recursively cleanup children
 	children := el.Get("childNodes")
 	if !children.IsUndefined() && !children.IsNull() {

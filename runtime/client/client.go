@@ -39,11 +39,7 @@ func Mount(selector string, root component.Renderable) *App {
 }
 
 func (a *App) render() {
-	node := a.root.Render()
-	// Expand handles sub-component rerender bindings
-	expanded := component.Expand(node, a.render)
-	
-	a.renderer.Render(expanded)
+	a.renderer.Render(component.C(a.root))
 }
 
 // -----------------------------------------------------------------------

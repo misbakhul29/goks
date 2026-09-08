@@ -54,13 +54,13 @@ func scaffoldApp(name string) error {
 	}
 
 	files := map[string]string{
-		"go.mod":                   tmplGoMod,
-		"app/layout.go":            tmplLayout,
-		"app/page.go":              tmplPage,
-		"app/components/hero.go":   tmplHeroComponent,
-		"components/button.go":     tmplExampleComponent,
-		"models/user.go":           tmplExampleModel,
-		"services/user_service.go": tmplExampleService,
+		"go.mod":                    tmplGoMod,
+		"app/layout.gox":            tmplLayout,
+		"app/page.gox":              tmplPage,
+		"app/components/hero.gox":   tmplHeroComponent,
+		"components/button.gox":     tmplExampleComponent,
+		"models/user.go":            tmplExampleModel,
+		"services/user_service.go":  tmplExampleService,
 		"repositories/user_repo.go": tmplExampleRepository,
 		"api/routes.go":            tmplExampleAPI,
 		"config/goks.config.go":    tmplConfig,

@@ -2,6 +2,8 @@
 // Components are written in Go and compiled to WebAssembly to run in the browser.
 package component
 
+import "reflect"
+
 // NodeType represents the type of a virtual DOM node.
 type NodeType int
 
@@ -29,6 +31,18 @@ type Node struct {
 // Renderable is implemented by anything that can render itself to a Node tree.
 type Renderable interface {
 	Render() *Node
+}
+
+// FuncComponent is a functional component that implements Renderable.
+type FuncComponent func() *Node
+
+func (f FuncComponent) Render() *Node {
+	return f()
+}
+
+// FC wraps a function into a Node.
+func FC(f func() *Node) *Node {
+	return C(FuncComponent(f))
 }
 
 // H creates a new element Node (hyperscript-style).
@@ -123,22 +137,60 @@ func C(r Renderable) *Node {
 }
 
 // Expand recursively evaluates NodeTypeComponent nodes and returns a tree of real DOM representable nodes.
-// It wires up re-render callbacks to the provided appRerender function.
-func Expand(n *Node, appRerender func()) *Node {
+// It wires up re-render callbacks and manages the Fiber tree for functional hooks.
+func Expand(n *Node, appRerender func(), currentFiber *FiberNode) *Node {
 	if n == nil {
 		return nil
 	}
 
 	if n.Type == NodeTypeComponent && n.Component != nil {
-		// Wire up re-render for sub-components
+		// Wire up re-render for class components
 		if cb, ok := n.Component.(interface{ bindRerender(func()) }); ok {
 			cb.bindRerender(appRerender)
 		}
 
+		// Manage Fiber for functional components
+		var childFiber *FiberNode
+		if currentFiber != nil {
+			compType := reflect.TypeOf(n.Component)
+			var funcPtr uintptr
+			
+			// Extract function pointer if it's a FuncComponent to differentiate between different functions
+			if compType == reflect.TypeOf(FuncComponent(nil)) {
+				funcPtr = reflect.ValueOf(n.Component).Pointer()
+			}
+
+			childFiber = currentFiber.getOrCreateChild(currentFiber.ChildIndex)
+			if childFiber.CompType != nil {
+				if childFiber.CompType != compType || childFiber.FuncPtr != funcPtr {
+					// Component type changed at this position! Reset the fiber node!
+					childFiber = &FiberNode{}
+					currentFiber.Children[currentFiber.ChildIndex] = childFiber
+				}
+			}
+			childFiber.CompType = compType
+			childFiber.FuncPtr = funcPtr
+			childFiber.AppRerender = appRerender
+			currentFiber.ChildIndex++
+
+			// Reset hook and child index for the current render pass
+			childFiber.HookIndex = 0
+			childFiber.ChildIndex = 0
+		}
+
+		var prevFiber *FiberNode
+		if childFiber != nil {
+			prevFiber = setActiveFiber(childFiber)
+		}
+
 		// Recursively render the component
 		rendered := n.Component.Render()
-		child := Expand(rendered, appRerender)
+		child := Expand(rendered, appRerender, childFiber)
 		
+		if childFiber != nil {
+			setActiveFiber(prevFiber)
+		}
+
 		if child != nil {
 			// Attach the component instance to the resulting element for lifecycle hooks
 			child.Component = n.Component
@@ -147,10 +199,11 @@ func Expand(n *Node, appRerender func()) *Node {
 		return nil
 	}
 
-	// Expand children and flatten fragments
+	// Expand children and flatten fragments.
+	// For standard DOM nodes, we don't advance the component fiber.
 	var expandedChildren []*Node
 	for _, c := range n.Children {
-		child := Expand(c, appRerender)
+		child := Expand(c, appRerender, currentFiber)
 		if child == nil {
 			continue
 		}
