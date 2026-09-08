@@ -35,7 +35,7 @@ func GetModuleName(appDir string) (string, error) {
 }
 
 // GenerateRouter scans the app directory and generates app/routes.gen.go
-func GenerateRouter(appDir string) error {
+func GenerateRouter(appDir string, isProd bool) error {
 	moduleName, err := GetModuleName(appDir)
 	if err != nil {
 		return err
@@ -116,7 +116,7 @@ func GenerateRouter(appDir string) error {
 		return err
 	}
 
-	if err := writeServerMain(entryDir, appDir, moduleName); err != nil {
+	if err := writeServerMain(entryDir, appDir, moduleName, isProd); err != nil {
 		return err
 	}
 
@@ -332,7 +332,7 @@ func main() {
 	return os.WriteFile(filepath.Join(entryDir, "client_main.go"), []byte(content), 0644)
 }
 
-func writeServerMain(entryDir, appDir, moduleName string) error {
+func writeServerMain(entryDir, appDir, moduleName string, isProd bool) error {
 	hasConfig := false
 	if b, err := os.ReadFile(filepath.Join(appDir, "config", "goks.config.go")); err == nil {
 		if strings.Contains(string(b), "func ServerConfig") {
@@ -348,7 +348,14 @@ func writeServerMain(entryDir, appDir, moduleName string) error {
 		imports += fmt.Sprintf("\n\t\"%s/config\"", moduleName)
 	}
 
-	configInit := `	port := 3000
+	appDirStr := `"../.."`
+	devModeStr := `true`
+	if isProd {
+		appDirStr = `"."`
+		devModeStr = `false`
+	}
+
+	configInit := fmt.Sprintf(`	port := 3000
 	if envPort := os.Getenv("GOKS_CHILD_PORT"); envPort != "" {
 		if p, err := strconv.Atoi(envPort); err == nil {
 			port = p
@@ -356,12 +363,12 @@ func writeServerMain(entryDir, appDir, moduleName string) error {
 	}
 	cfg := server.Config{
 		Port:    port,
-		AppDir:  "../..",
-		DevMode: true,
+		AppDir:  %s,
+		DevMode: %s,
 		Root:    &AppRouter{},
-	}`
+	}`, appDirStr, devModeStr)
 	if hasConfig {
-		configInit = `	port := 3000
+		configInit = fmt.Sprintf(`	port := 3000
 	if envPort := os.Getenv("GOKS_CHILD_PORT"); envPort != "" {
 		if p, err := strconv.Atoi(envPort); err == nil {
 			port = p
@@ -369,9 +376,9 @@ func writeServerMain(entryDir, appDir, moduleName string) error {
 	}
 	cfg := config.ServerConfig()
 	cfg.Port = port
-	cfg.AppDir = "../.."
-	cfg.DevMode = true
-	cfg.Root = &AppRouter{}`
+	cfg.AppDir = %s
+	cfg.DevMode = %s
+	cfg.Root = &AppRouter{}`, appDirStr, devModeStr)
 	}
 
 	content := fmt.Sprintf(`//go:build !js || !wasm

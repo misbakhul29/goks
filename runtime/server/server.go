@@ -125,6 +125,9 @@ func (s *DevServer) setupRoutes() {
 	// Serve compiled WASM binary
 	s.router.GET("/app.wasm", func(ctx *router.Context) error {
 		wasmPath := filepath.Join(s.cfg.AppDir, ".goks", "build", "app.wasm")
+		if _, err := os.Stat(wasmPath); os.IsNotExist(err) {
+			wasmPath = filepath.Join(s.cfg.AppDir, "app.wasm")
+		}
 		http.ServeFile(ctx.Response(), ctx.Request(), wasmPath)
 		return nil
 	})
@@ -132,6 +135,9 @@ func (s *DevServer) setupRoutes() {
 	// Serve compiled CSS
 	s.router.GET("/app.css", func(ctx *router.Context) error {
 		cssPath := filepath.Join(s.cfg.AppDir, ".goks", "build", "app.css")
+		if _, err := os.Stat(cssPath); os.IsNotExist(err) {
+			cssPath = filepath.Join(s.cfg.AppDir, "app.css")
+		}
 		ctx.Response().Header().Set("Content-Type", "text/css; charset=utf-8")
 		http.ServeFile(ctx.Response(), ctx.Request(), cssPath)
 		return nil
@@ -139,6 +145,15 @@ func (s *DevServer) setupRoutes() {
 
 	// Serve wasm_exec.js (Go WASM bootstrap)
 	s.router.GET("/wasm_exec.js", func(ctx *router.Context) error {
+		// In production, we expect wasm_exec.js to be in the AppDir (dist folder)
+		prodExec := filepath.Join(s.cfg.AppDir, "wasm_exec.js")
+		if _, err := os.Stat(prodExec); err == nil {
+			ctx.Response().Header().Set("Content-Type", "application/javascript")
+			http.ServeFile(ctx.Response(), ctx.Request(), prodExec)
+			return nil
+		}
+
+		// Fallback to GOROOT for development
 		goRoot := os.Getenv("GOROOT")
 		if goRoot == "" {
 			out, err := exec.Command("go", "env", "GOROOT").Output()
@@ -151,7 +166,6 @@ func (s *DevServer) setupRoutes() {
 			wasmExec = filepath.Join(goRoot, "lib", "wasm", "wasm_exec.js")
 		}
 
-		// Set MIME type eksplisit
 		ctx.Response().Header().Set("Content-Type", "application/javascript")
 		http.ServeFile(ctx.Response(), ctx.Request(), wasmExec)
 		return nil

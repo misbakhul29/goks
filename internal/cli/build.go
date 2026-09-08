@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/fatih/color"
@@ -30,8 +31,8 @@ func BuildCmd() *cobra.Command {
 
 			fmt.Println(color.CyanString("\n  🔨 GoKS Production Build"))
 			
-			// Generate App Router
-			if err := generator.GenerateRouter(cwd); err != nil {
+			// Generate App Router for Production
+			if err := generator.GenerateRouter(cwd, true); err != nil {
 				return err
 			}
 
@@ -54,12 +55,37 @@ func BuildCmd() *cobra.Command {
 				return err
 			}
 
+			// Copy wasm, css, and public/ into outDir so everything is in one folder
+			fmt.Print("  [4/4] Bundling assets...")
+			start := time.Now()
+			_ = copyFile(filepath.Join(goksBuildDir, "app.wasm"), filepath.Join(outDir, "app.wasm"))
+			_ = copyFile(filepath.Join(goksBuildDir, "app.css"), filepath.Join(outDir, "app.css"))
+			_ = copyDir(filepath.Join(cwd, "public"), filepath.Join(outDir, "public"))
+
+			// Copy wasm_exec.js
+			goRoot := os.Getenv("GOROOT")
+			if goRoot == "" {
+				out, err := exec.Command("go", "env", "GOROOT").Output()
+				if err == nil {
+					goRoot = strings.TrimSpace(string(out))
+				}
+			}
+			wasmExec := filepath.Join(goRoot, "misc", "wasm", "wasm_exec.js")
+			if _, err := os.Stat(wasmExec); os.IsNotExist(err) {
+				wasmExec = filepath.Join(goRoot, "lib", "wasm", "wasm_exec.js")
+			}
+			_ = copyFile(wasmExec, filepath.Join(outDir, "wasm_exec.js"))
+			
+			fmt.Printf(" %s (%v)\n", color.GreenString("done"), time.Since(start).Round(time.Millisecond))
+
 			fmt.Println()
 			fmt.Println(color.GreenString("  ✅ Build complete!"))
 			fmt.Printf("  Output: %s\n", color.CyanString(outDir))
-			fmt.Printf("  %s  %s\n", color.HiBlackString("server →"), filepath.Join(outDir, "server"))
-			fmt.Printf("  %s  %s\n", color.HiBlackString("wasm   →"), filepath.Join(goksBuildDir, "app.wasm"))
-			fmt.Printf("  %s  %s\n", color.HiBlackString("css    →"), filepath.Join(goksBuildDir, "app.css"))
+			fmt.Printf("  %s  %s\n", color.HiBlackString("server    →"), filepath.Join(outDir, "server"))
+			fmt.Printf("  %s  %s\n", color.HiBlackString("wasm      →"), filepath.Join(outDir, "app.wasm"))
+			fmt.Printf("  %s  %s\n", color.HiBlackString("css       →"), filepath.Join(outDir, "app.css"))
+			fmt.Printf("  %s  %s\n", color.HiBlackString("static    →"), filepath.Join(outDir, "public/"))
+			fmt.Printf("  %s  %s\n", color.HiBlackString("wasm_exec →"), filepath.Join(outDir, "wasm_exec.js"))
 			fmt.Printf("\n  Deploy: %s\n", color.CyanString("./dist/server"))
 			return nil
 		},
@@ -70,7 +96,7 @@ func BuildCmd() *cobra.Command {
 }
 
 func buildWASM(cwd, outDir string) error {
-	fmt.Print("  [1/3] Compiling WASM frontend...")
+	fmt.Print("  [1/4] Compiling WASM frontend...")
 	start := time.Now()
 	entryDir := filepath.Join(cwd, ".goks", "entry")
 	cmd := exec.Command("go", "build", "-o", filepath.Join(outDir, "app.wasm"), ".")
@@ -85,7 +111,7 @@ func buildWASM(cwd, outDir string) error {
 }
 
 func buildCSS(cwd, buildDir string) error {
-	fmt.Print("  [2/3] Compiling Tailwind CSS...")
+	fmt.Print("  [2/4] Compiling Tailwind CSS...")
 	start := time.Now()
 
 	twCLI, err := ensureTailwindCLI()
@@ -106,7 +132,7 @@ func buildCSS(cwd, buildDir string) error {
 }
 
 func buildServer(cwd, outDir string) error {
-	fmt.Print("  [3/3] Building server binary...")
+	fmt.Print("  [3/4] Building server binary...")
 	start := time.Now()
 	entryDir := filepath.Join(cwd, ".goks", "entry")
 	cmd := exec.Command("go", "build", "-o", filepath.Join(outDir, "server"), ".")
