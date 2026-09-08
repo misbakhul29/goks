@@ -204,8 +204,8 @@ func DevCmd() *cobra.Command {
 }
 
 func compileWasmAndServer(appDir string) ([]byte, error) {
-	// Generate router logic & go.mod
-	_ = generator.GenerateRouter(appDir)
+	// Generate router logic & go.mod for Development
+	_ = generator.GenerateRouter(appDir, false)
 	
 	entryDir := filepath.Join(appDir, ".goks", "entry")
 	

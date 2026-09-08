@@ -145,8 +145,8 @@ func (s *DevServer) setupRoutes() {
 
 	// Serve wasm_exec.js (Go WASM bootstrap)
 	s.router.GET("/wasm_exec.js", func(ctx *router.Context) error {
-		// In production, we expect wasm_exec.js to be in the AppDir (dist folder)
-		prodExec := filepath.Join(s.cfg.AppDir, "wasm_exec.js")
+		// In production, we expect wasm_exec.js to be in .goks/build
+		prodExec := filepath.Join(s.cfg.AppDir, ".goks", "build", "wasm_exec.js")
 		if _, err := os.Stat(prodExec); err == nil {
 			ctx.Response().Header().Set("Content-Type", "application/javascript")
 			http.ServeFile(ctx.Response(), ctx.Request(), prodExec)
