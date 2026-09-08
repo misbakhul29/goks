@@ -36,7 +36,13 @@ func BuildCmd() *cobra.Command {
 			}
 
 			goksBuildDir := filepath.Join(cwd, ".goks", "build")
+			entryDir := filepath.Join(cwd, ".goks", "entry")
 			os.MkdirAll(goksBuildDir, 0755)
+
+			// Ensure dependencies are downloaded before compiling anything
+			tidyCmd := exec.Command("go", "mod", "tidy")
+			tidyCmd.Dir = entryDir
+			_ = tidyCmd.Run()
 
 			if err := buildWASM(cwd, goksBuildDir); err != nil {
 				return err
@@ -103,12 +109,6 @@ func buildServer(cwd, outDir string) error {
 	fmt.Print("  [3/3] Building server binary...")
 	start := time.Now()
 	entryDir := filepath.Join(cwd, ".goks", "entry")
-	
-	// Run go mod tidy in entryDir first
-	tidyCmd := exec.Command("go", "mod", "tidy")
-	tidyCmd.Dir = entryDir
-	_ = tidyCmd.Run()
-	
 	cmd := exec.Command("go", "build", "-o", filepath.Join(outDir, "server"), ".")
 	cmd.Dir = entryDir
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
