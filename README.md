@@ -21,7 +21,7 @@ It embraces a "batteries-included" philosophy, providing everything needed to bu
 To install the `goks` CLI tool, run:
 
 ```bash
-go install github.com/misbakhul29/goks/cli/cmd/goks@latest
+go install github.com/misbakhul29/goks@latest
 ```
 
 *(Note: Ensure your `$(go env GOPATH)/bin` is in your system's `$PATH`)*
