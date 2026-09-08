@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -36,12 +37,12 @@ func init() {
 
 // Config holds the server configuration.
 type Config struct {
-	Host    string               // default "0.0.0.0"
-	Port        int                  // default 3000
-	AppDir      string               // path to user's app directory
-	DevMode     bool                 // enable hot reload and live reload
-	Root        component.Renderable // Root component for Server-Side Rendering (SSR)
-	Middlewares []router.MiddlewareFunc  // User-defined global middlewares
+	Host        string                  // default "0.0.0.0"
+	Port        int                     // default 3000
+	AppDir      string                  // path to user's app directory
+	DevMode     bool                    // enable hot reload and live reload
+	Root        component.Renderable    // Root component for Server-Side Rendering (SSR)
+	Middlewares []router.MiddlewareFunc // User-defined global middlewares
 }
 
 // DevServer is the GoKS development server with hot reload.
@@ -205,17 +206,17 @@ func (s *DevServer) serveShell(ctx *router.Context) error {
 	var ssrContent string
 	if s.cfg.Root != nil {
 		ssrMutex.Lock()
-		
+
 		// Temporarily set the path for SSR
 		originalPath := router.CurrentPath.Get()
 		router.CurrentPath.Set(ctx.Request().URL.Path)
-		
+
 		node := s.cfg.Root.Render()
 		ssrContent = component.RenderToString(node)
-		
+
 		// Restore
 		router.CurrentPath.Set(originalPath)
-		
+
 		ssrMutex.Unlock()
 	}
 
