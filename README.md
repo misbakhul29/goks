@@ -6,8 +6,8 @@ It embraces a "batteries-included" philosophy, providing everything needed to bu
 
 ## Features
 
-- **CLI Tooling:** `goks new`, `goks dev`, and `goks build` for scaffolding, hot-reloading (with an intelligent error overlay), and production builds.
-- **File-System Routing:** Organize your routes in the `app/` directory similar to the Next.js App Router.
+- **CLI Tooling:** `goks new`, `goks dev`, `goks page`, `goks build`, and `goks start` for scaffolding, hot-reloading, generating pages, and production deployments.
+- **File-System Routing:** Organize your routes in the `app/` directory similar to the Next.js App Router. Use `goks page <route>` to easily scaffold new pages.
 - **Go-Native Virtual DOM:** Build your UI components using Go code (no HTML templates) with a chainable builder API (`html.Div()`, `html.H1()`, etc.).
 - **SSR & WASM:** Server-Side Rendering out of the box, with seamless handoff to WebAssembly on the client.
 - **Built-in ORM:** Fluent query builder (`orm.Query[T]().Where(...)`), auto-timestamps, soft-deletes, and migrations for PostgreSQL, MySQL, and SQLite.
@@ -44,6 +44,20 @@ goks dev
 
 Your app will be running at `http://localhost:3000`. 
 The dev server includes a smart error overlay; if you introduce a compile error in your Go code, the browser will display the error directly and auto-recover when fixed.
+
+To create a new page, use the CLI:
+
+```bash
+goks page about
+# Creates app/about/page.go
+```
+
+When you are ready for production, build and start the server:
+
+```bash
+goks build
+goks start 3000
+```
 
 ## Project Structure
 
