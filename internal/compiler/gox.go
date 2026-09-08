@@ -172,6 +172,17 @@ func Transpile(content string) (string, error) {
 		idx = len(prefix) + len(replacement)
 	}
 
+	// Auto-inject html import if html package is used and not yet imported
+	if strings.Contains(content, "html.") && !strings.Contains(content, `"github.com/misbakhul29/goks/pkg/html"`) {
+		if strings.Contains(content, "import (") {
+			content = strings.Replace(content, "import (", "import (\n\t\"github.com/misbakhul29/goks/pkg/html\"", 1)
+		} else if strings.Contains(content, "package ") {
+			if pkgIdx := strings.Index(content, "\n"); pkgIdx != -1 {
+				content = content[:pkgIdx+1] + "\nimport \"github.com/misbakhul29/goks/pkg/html\"\n" + content[pkgIdx+1:]
+			}
+		}
+	}
+
 	return content, nil
 }
 

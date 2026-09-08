@@ -52,8 +52,8 @@ func genPageCmd() *cobra.Command {
 		Long: `Generate a GoKS page component.
 
 Examples:
-  goks generate page about           → app/pages/about.go
-  goks generate page blog/[slug]     → app/pages/blog/[slug].go`,
+  goks generate page about           → app/about/page.gox
+  goks generate page blog/_slug      → app/blog/_slug/page.gox`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return genPage(args[0])
@@ -62,17 +62,31 @@ Examples:
 }
 
 func genPage(pagePath string) error {
-	parts := strings.Split(pagePath, "/")
-	name := parts[len(parts)-1]
-	structName := title(strings.ReplaceAll(strings.ReplaceAll(name, "[", ""), "]", "")) + "Page"
-
-	dir := filepath.Join("app", "pages", filepath.Join(parts[:len(parts)-1]...))
-	path := filepath.Join(dir, name+".go")
+	route := strings.TrimPrefix(filepath.ToSlash(filepath.Clean(pagePath)), "/")
+	dir := filepath.Join("app", route)
+	path := filepath.Join(dir, "page.gox")
 
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
-	if err := writeTemplate(path, tmplGenPage, map[string]string{"StructName": structName}); err != nil {
+	if _, err := os.Stat(path); err == nil {
+		return fmt.Errorf("file already exists: %s", path)
+	}
+
+	packageName := filepath.Base(dir)
+	packageName = strings.ReplaceAll(packageName, "-", "")
+	packageName = strings.ReplaceAll(packageName, " ", "")
+	if packageName == "" || packageName == "." || route == "" {
+		packageName = "app"
+	}
+
+	data := map[string]string{
+		"PackageName": strings.ToLower(packageName),
+		"Route":       route,
+		"PageTitle":   title(filepath.Base(route)),
+	}
+
+	if err := writeTemplate(path, tmplGenPage, data); err != nil {
 		return err
 	}
 	fmt.Printf("  %s %s\n", color.GreenString("create"), path)
@@ -90,8 +104,15 @@ func genComponentCmd() *cobra.Command {
 		Aliases: []string{"comp", "c"},
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			path := filepath.Join("app", "components", strings.ToLower(args[0])+".go")
-			if err := writeTemplate(path, tmplGenComponent, map[string]string{"Name": args[0]}); err != nil {
+			dir := filepath.Join("app", "components")
+			if _, err := os.Stat(dir); os.IsNotExist(err) {
+				dir = "components"
+			}
+			path := filepath.Join(dir, strings.ToLower(args[0])+".gox")
+			if err := os.MkdirAll(dir, 0755); err != nil {
+				return err
+			}
+			if err := writeTemplate(path, tmplGenComponent, map[string]string{"Name": title(args[0])}); err != nil {
 				return err
 			}
 			fmt.Printf("  %s %s\n", color.GreenString("create"), path)
@@ -131,31 +152,34 @@ type {{.Name}} struct {
 }
 `
 
-var tmplGenPage = `//go:build js && wasm
+var tmplGenPage = `package {{.PackageName}}
 
-package pages
+import (
+	"github.com/misbakhul29/goks/pkg/component"
+	"github.com/misbakhul29/goks/pkg/html"
+)
 
-import "github.com/misbakhul29/goks/pkg/component"
-
-// {{.StructName}} is a GoKS page component.
-type {{.StructName}} struct {
+// Page is the page component for the "{{.Route}}" route.
+type Page struct {
 	component.ComponentBase
 }
 
-func (p *{{.StructName}}) Render() *component.Node {
-	return component.H("div", component.Props{"class": "page"},
-		component.H("h1", nil,
-			component.Text("{{.StructName}}"),
-		),
+func (p *Page) Render() *component.Node {
+	return (
+		<div class="p-8">
+			<h1 class="text-3xl font-bold mb-4">{{.PageTitle}}</h1>
+			<p class="text-slate-600 dark:text-slate-400">This is the {{.PageTitle}} page.</p>
+		</div>
 	)
 }
 `
 
-var tmplGenComponent = `//go:build js && wasm
+var tmplGenComponent = `package components
 
-package components
-
-import "github.com/misbakhul29/goks/pkg/component"
+import (
+	"github.com/misbakhul29/goks/pkg/component"
+	"github.com/misbakhul29/goks/pkg/html"
+)
 
 // {{.Name}} is a reusable GoKS UI component.
 type {{.Name}} struct {
@@ -163,8 +187,10 @@ type {{.Name}} struct {
 }
 
 func (c *{{.Name}}) Render() *component.Node {
-	return component.H("div", component.Props{"class": "{{.Name}}"},
-		component.Text("{{.Name}} component"),
+	return (
+		<div class="p-4 rounded-lg border border-slate-200 dark:border-slate-800">
+			<span class="text-slate-900 dark:text-slate-100 font-medium">{{.Name}} Component</span>
+		</div>
 	)
 }
 `

@@ -37,14 +37,20 @@ type Page struct {
 }
 
 func (p *Page) Render() *component.Node {
-	return html.Div(
-		html.H1("{{.PageTitle}}").Class("text-3xl font-bold mb-4"),
-		html.P("This is the {{.PageTitle}} page."),
-	).Class("p-8")
+	return (
+		<div class="p-8">
+			<h1 class="text-3xl font-bold mb-4">{{.PageTitle}}</h1>
+			<p class="text-slate-600 dark:text-slate-400">This is the {{.PageTitle}} page.</p>
+		</div>
+	)
 }
 `
 
 func generatePage(route string) error {
+	if _, err := os.Stat("app"); os.IsNotExist(err) {
+		return fmt.Errorf("folder 'app/' tidak ditemukan — pastikan kamu menjalankan perintah ini di root project GoKS")
+	}
+
 	// Clean the route and build the target directory inside app/
 	route = strings.TrimPrefix(filepath.ToSlash(filepath.Clean(route)), "/")
 	
@@ -55,14 +61,13 @@ func generatePage(route string) error {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
 
-	targetFile := filepath.Join(targetDir, "page.go")
+	targetFile := filepath.Join(targetDir, "page.gox")
 	if _, err := os.Stat(targetFile); err == nil {
 		return fmt.Errorf("file already exists: %s", targetFile)
 	}
 
 	// Determine package name from the last part of the route
 	packageName := filepath.Base(targetDir)
-	// Go package names shouldn't contain hyphens or spaces, generally
 	packageName = strings.ReplaceAll(packageName, "-", "")
 	packageName = strings.ReplaceAll(packageName, " ", "")
 	

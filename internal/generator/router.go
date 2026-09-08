@@ -432,6 +432,11 @@ func writeServerMain(entryDir, appDir, moduleName string, isProd bool) error {
 	}
 
 	configInit := fmt.Sprintf(`	port := 3000
+	if envPort := os.Getenv("PORT"); envPort != "" {
+		if p, err := strconv.Atoi(envPort); err == nil {
+			port = p
+		}
+	}
 	if envPort := os.Getenv("GOKS_CHILD_PORT"); envPort != "" {
 		if p, err := strconv.Atoi(envPort); err == nil {
 			port = p
@@ -445,6 +450,11 @@ func writeServerMain(entryDir, appDir, moduleName string, isProd bool) error {
 	}`, appDirStr, devModeStr)
 	if hasConfig {
 		configInit = fmt.Sprintf(`	port := 3000
+	if envPort := os.Getenv("PORT"); envPort != "" {
+		if p, err := strconv.Atoi(envPort); err == nil {
+			port = p
+		}
+	}
 	if envPort := os.Getenv("GOKS_CHILD_PORT"); envPort != "" {
 		if p, err := strconv.Atoi(envPort); err == nil {
 			port = p
