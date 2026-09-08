@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,19 +16,11 @@ import (
 
 // BuildCmd returns the `goks build` subcommand.
 func BuildCmd() *cobra.Command {
-	var outDir string
-
 	cmd := &cobra.Command{
 		Use:   "build",
 		Short: "Build GoKS app for production (server binary + WASM)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cwd, _ := os.Getwd()
-			if outDir == "" {
-				outDir = filepath.Join(cwd, "dist")
-			}
-			if err := os.MkdirAll(outDir, 0755); err != nil {
-				return err
-			}
 
 			fmt.Println(color.CyanString("\n  🔨 GoKS Production Build"))
 			
@@ -51,22 +44,14 @@ func BuildCmd() *cobra.Command {
 			if err := buildCSS(cwd, goksBuildDir); err != nil {
 				return err
 			}
-			if err := buildServer(cwd, outDir); err != nil {
+			if err := buildServer(cwd, goksBuildDir); err != nil {
 				return err
 			}
 
-			// Copy wasm, css, and public/ into outDir so everything is in one folder
-			fmt.Print("  [4/4] Bundling assets...")
-			start := time.Now()
-			_ = copyFile(filepath.Join(goksBuildDir, "app.wasm"), filepath.Join(outDir, "app.wasm"))
-			_ = copyFile(filepath.Join(goksBuildDir, "app.css"), filepath.Join(outDir, "app.css"))
-			_ = copyDir(filepath.Join(cwd, "public"), filepath.Join(outDir, "public"))
-
-			// Copy wasm_exec.js
+			// Copy wasm_exec.js into .goks/build for production
 			goRoot := os.Getenv("GOROOT")
 			if goRoot == "" {
-				out, err := exec.Command("go", "env", "GOROOT").Output()
-				if err == nil {
+				if out, err := exec.Command("go", "env", "GOROOT").Output(); err == nil {
 					goRoot = strings.TrimSpace(string(out))
 				}
 			}
@@ -74,29 +59,38 @@ func BuildCmd() *cobra.Command {
 			if _, err := os.Stat(wasmExec); os.IsNotExist(err) {
 				wasmExec = filepath.Join(goRoot, "lib", "wasm", "wasm_exec.js")
 			}
-			_ = copyFile(wasmExec, filepath.Join(outDir, "wasm_exec.js"))
-			
-			fmt.Printf(" %s (%v)\n", color.GreenString("done"), time.Since(start).Round(time.Millisecond))
+			copyFile(wasmExec, filepath.Join(goksBuildDir, "wasm_exec.js"))
 
 			fmt.Println()
 			fmt.Println(color.GreenString("  ✅ Build complete!"))
-			fmt.Printf("  Output: %s\n", color.CyanString(outDir))
-			fmt.Printf("  %s  %s\n", color.HiBlackString("server    →"), filepath.Join(outDir, "server"))
-			fmt.Printf("  %s  %s\n", color.HiBlackString("wasm      →"), filepath.Join(outDir, "app.wasm"))
-			fmt.Printf("  %s  %s\n", color.HiBlackString("css       →"), filepath.Join(outDir, "app.css"))
-			fmt.Printf("  %s  %s\n", color.HiBlackString("static    →"), filepath.Join(outDir, "public/"))
-			fmt.Printf("  %s  %s\n", color.HiBlackString("wasm_exec →"), filepath.Join(outDir, "wasm_exec.js"))
-			fmt.Printf("\n  Deploy: %s\n", color.CyanString("./dist/server"))
+			fmt.Printf("  %s  %s\n", color.HiBlackString("server    →"), filepath.Join(goksBuildDir, "server"))
+			fmt.Printf("  %s  %s\n", color.HiBlackString("wasm      →"), filepath.Join(goksBuildDir, "app.wasm"))
+			fmt.Printf("  %s  %s\n", color.HiBlackString("css       →"), filepath.Join(goksBuildDir, "app.css"))
+			fmt.Printf("\n  Deploy: %s\n", color.CyanString("goks start [port]"))
 			return nil
 		},
 	}
 
-	cmd.Flags().StringVarP(&outDir, "out", "o", "", "Output directory (default: ./dist)")
 	return cmd
 }
 
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	_, err = io.Copy(out, in)
+	return err
+}
+
 func buildWASM(cwd, outDir string) error {
-	fmt.Print("  [1/4] Compiling WASM frontend...")
+	fmt.Print("  [1/3] Compiling WASM frontend...")
 	start := time.Now()
 	entryDir := filepath.Join(cwd, ".goks", "entry")
 	cmd := exec.Command("go", "build", "-o", filepath.Join(outDir, "app.wasm"), ".")
@@ -111,7 +105,7 @@ func buildWASM(cwd, outDir string) error {
 }
 
 func buildCSS(cwd, buildDir string) error {
-	fmt.Print("  [2/4] Compiling Tailwind CSS...")
+	fmt.Print("  [2/3] Compiling Tailwind CSS...")
 	start := time.Now()
 
 	twCLI, err := ensureTailwindCLI()
@@ -132,7 +126,7 @@ func buildCSS(cwd, buildDir string) error {
 }
 
 func buildServer(cwd, outDir string) error {
-	fmt.Print("  [3/4] Building server binary...")
+	fmt.Print("  [3/3] Building server binary...")
 	start := time.Now()
 	entryDir := filepath.Join(cwd, ".goks", "entry")
 	cmd := exec.Command("go", "build", "-o", filepath.Join(outDir, "server"), ".")

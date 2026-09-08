@@ -32,6 +32,7 @@ func main() {
 		cli.NewCmd(),
 		cli.DevCmd(),
 		cli.BuildCmd(),
+		cli.StartCmd(),
 		cli.GenerateCmd(),
 		cli.PageCmd(),
 		versionCmd(),
