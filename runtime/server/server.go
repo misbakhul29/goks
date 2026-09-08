@@ -24,6 +24,8 @@ import (
 	"github.com/misbakhul29/goks/pkg/rpc"
 )
 
+var ssrMutex sync.Mutex
+
 func init() {
 	// Pastikan MIME type standar selalu terdaftar, bahkan jika OS tidak memilikinya.
 	mime.AddExtensionType(".css", "text/css; charset=utf-8")
@@ -202,8 +204,19 @@ func (s *DevServer) setupRoutes() {
 func (s *DevServer) serveShell(ctx *router.Context) error {
 	var ssrContent string
 	if s.cfg.Root != nil {
+		ssrMutex.Lock()
+		
+		// Temporarily set the path for SSR
+		originalPath := router.CurrentPath.Get()
+		router.CurrentPath.Set(ctx.Request().URL.Path)
+		
 		node := s.cfg.Root.Render()
 		ssrContent = component.RenderToString(node)
+		
+		// Restore
+		router.CurrentPath.Set(originalPath)
+		
+		ssrMutex.Unlock()
 	}
 
 	lrScript := ""
