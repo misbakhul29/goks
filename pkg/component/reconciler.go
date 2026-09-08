@@ -35,6 +35,11 @@ func Reconcile(old, new *Node) []Patch {
 }
 
 func diff(patches *[]Patch, old, new *Node, path []int, index int) {
+	// Optimization: If it's the exact same pointer (and not nil), skip diffing entirely
+	if old != nil && old == new {
+		return
+	}
+
 	// Case 1: no old node → create new
 	if old == nil {
 		*patches = append(*patches, Patch{Type: PatchCreate, NewNode: new, Index: index, Path: path})
