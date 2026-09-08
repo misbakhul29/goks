@@ -301,27 +301,9 @@ func shellHTML(liveReloadScript, envScript, ssrContent string) string {
   ` + envScript + `
   <style>
     #app { min-height: 100vh; }
-    #goks-loading {
-      position: fixed; inset: 0;
-      display: flex; align-items: center; justify-content: center;
-      background: #0f0f0f; color: #fff; font-size: 1rem;
-      gap: 12px; z-index: 9999;
-    }
-    .spinner {
-      width: 20px; height: 20px;
-      border: 2px solid rgba(255,255,255,0.2);
-      border-top-color: #fff;
-      border-radius: 50%;
-      animation: spin 0.6s linear infinite;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
-  <div id="goks-loading">
-    <div class="spinner"></div>
-    <span>Loading GoKS app...</span>
-  </div>
   <div id="app">` + ssrContent + `</div>
 
   <script src="/wasm_exec.js"></script>
@@ -329,12 +311,10 @@ func shellHTML(liveReloadScript, envScript, ssrContent string) string {
     const go = new Go();
     WebAssembly.instantiateStreaming(fetch("/app.wasm"), go.importObject)
       .then(result => {
-        document.getElementById("goks-loading").style.display = "none";
         go.run(result.instance);
       })
       .catch(err => {
-        document.getElementById("goks-loading").innerHTML =
-          '<span style="color:#ff6b6b">❌ Failed to load WASM: ' + err.message + '</span>';
+        console.error("Failed to load WASM:", err);
       });
   </script>
   ` + liveReloadScript + `
