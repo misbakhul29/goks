@@ -21,8 +21,12 @@ type Renderer struct {
 // NewRenderer creates a new renderer attached to a root DOM element ID.
 func NewRenderer(rootID string) *Renderer {
 	document := js.Global().Get("document")
-	rootElement := document.Call("getElementById", rootID)
-	if rootElement.IsNull() {
+	id := strings.TrimPrefix(rootID, "#")
+	rootElement := document.Call("getElementById", id)
+	if rootElement.IsNull() || rootElement.IsUndefined() {
+		rootElement = document.Call("querySelector", rootID)
+	}
+	if rootElement.IsNull() || rootElement.IsUndefined() {
 		panic("root element not found")
 	}
 
