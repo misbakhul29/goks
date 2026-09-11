@@ -35,6 +35,7 @@ func main() {
 		cli.StartCmd(),
 		cli.GenerateCmd(),
 		cli.PageCmd(),
+		cli.LSPCmd(),
 		versionCmd(),
 	)
 

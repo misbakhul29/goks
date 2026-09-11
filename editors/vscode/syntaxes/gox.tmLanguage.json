@@ -1,0 +1,116 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "GoKS GOX",
+  "scopeName": "source.gox",
+  "patterns": [
+    {
+      "include": "#jsx-block"
+    },
+    {
+      "include": "source.go"
+    }
+  ],
+  "repository": {
+    "jsx-block": {
+      "begin": "(return\\s*\\()",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.go"
+        }
+      },
+      "end": "(\\))",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.section.parens.end.gox"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#jsx-tag"
+        }
+      ]
+    },
+    "jsx-tag": {
+      "patterns": [
+        {
+          "name": "tag.open.gox",
+          "begin": "(</?)([a-zA-Z0-9_.:]+)",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.tag.begin.gox"
+            },
+            "2": {
+              "name": "entity.name.tag.gox"
+            }
+          },
+          "end": "(/?>)",
+          "endCaptures": {
+            "1": {
+              "name": "punctuation.definition.tag.end.gox"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#jsx-attribute"
+            }
+          ]
+        },
+        {
+          "include": "#jsx-expression"
+        }
+      ]
+    },
+    "jsx-attribute": {
+      "patterns": [
+        {
+          "name": "entity.other.attribute-name.gox",
+          "match": "\\b([a-zA-Z0-9_:-]+)(?=\\=)"
+        },
+        {
+          "name": "string.quoted.double.gox",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.gox",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.gox",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.gox",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "include": "#jsx-expression"
+        }
+      ]
+    },
+    "jsx-expression": {
+      "begin": "\\{",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.begin.gox"
+        }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.end.gox"
+        }
+      },
+      "patterns": [
+        {
+          "include": "source.go"
+        }
+      ]
+    }
+  }
+}
