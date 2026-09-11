@@ -21,13 +21,16 @@ type Renderer struct {
 // NewRenderer creates a new renderer attached to a root DOM element ID.
 func NewRenderer(rootID string) *Renderer {
 	document := js.Global().Get("document")
-	id := strings.TrimPrefix(rootID, "#")
-	rootElement := document.Call("getElementById", id)
-	if rootElement.IsNull() || rootElement.IsUndefined() {
-		rootElement = document.Call("querySelector", rootID)
+	var rootElement js.Value
+	if rootID != "" {
+		id := strings.TrimPrefix(rootID, "#")
+		rootElement = document.Call("getElementById", id)
+		if rootElement.IsNull() || rootElement.IsUndefined() {
+			rootElement = document.Call("querySelector", rootID)
+		}
 	}
 	if rootElement.IsNull() || rootElement.IsUndefined() {
-		panic("root element not found")
+		rootElement = document.Get("body")
 	}
 
 	return &Renderer{
@@ -46,6 +49,16 @@ func (r *Renderer) Render(node *Node) {
 		r.Render(node) // re-render callback
 	}, r.RootFiber)
 
+	if newTree == nil {
+		return
+	}
+
+	// Document-level rendering (when root layout returns <html>)
+	if newTree.Tag == "html" {
+		r.renderDocument(newTree)
+		return
+	}
+
 	if r.current == nil {
 		// Initial mount: clear root and create the full tree
 		r.rootElement.Set("innerHTML", "")
@@ -56,6 +69,95 @@ func (r *Renderer) Render(node *Node) {
 		patches := Reconcile(r.current, newTree)
 		r.applyPatches(r.rootElement, patches, r.current, newTree)
 	}
+	r.current = newTree
+}
+
+func (r *Renderer) renderDocument(newTree *Node) {
+	doc := js.Global().Get("document")
+	htmlEl := doc.Get("documentElement")
+
+	// 1. Sync <html> props (e.g. lang, class)
+	var oldHtmlProps Props
+	if r.current != nil {
+		oldHtmlProps = r.current.Props
+	}
+	r.applyProps(htmlEl, newTree.Props, oldHtmlProps)
+
+	// 2. Extract <head> and <body> from newTree.Children
+	var headNode, bodyNode *Node
+	for _, ch := range newTree.Children {
+		if ch.Tag == "head" {
+			headNode = ch
+		} else if ch.Tag == "body" {
+			bodyNode = ch
+		}
+	}
+
+	// 3. Sync <head> (e.g. document.title)
+	if headNode != nil {
+		for _, ch := range headNode.Children {
+			if ch.Tag == "title" && len(ch.Children) > 0 {
+				doc.Set("title", ch.Children[0].Text)
+			}
+		}
+	}
+
+	// 4. Sync <body>
+	if bodyNode != nil {
+		bodyEl := doc.Get("body")
+		var oldBodyProps Props
+		if r.current != nil {
+			for _, ch := range r.current.Children {
+				if ch.Tag == "body" {
+					oldBodyProps = ch.Props
+					break
+				}
+			}
+		}
+		r.applyProps(bodyEl, bodyNode.Props, oldBodyProps)
+
+		// 5. Reconcile body children into container
+		container := doc.Call("getElementById", "__goks")
+		if container.IsNull() || container.IsUndefined() {
+			container = doc.Call("getElementById", "app")
+		}
+		if container.IsNull() || container.IsUndefined() {
+			container = bodyEl
+		}
+
+		virtualContainer := &Node{
+			Type:     NodeTypeElement,
+			Tag:      "div",
+			Children: bodyNode.Children,
+		}
+
+		var oldVirtualContainer *Node
+		if r.current != nil {
+			for _, ch := range r.current.Children {
+				if ch.Tag == "body" {
+					oldVirtualContainer = &Node{
+						Type:     NodeTypeElement,
+						Tag:      "div",
+						Children: ch.Children,
+					}
+					break
+				}
+			}
+		}
+
+		if oldVirtualContainer == nil {
+			// Initial mount: populate container
+			container.Set("innerHTML", "")
+			for _, ch := range bodyNode.Children {
+				container.Call("appendChild", r.createDOMNode(ch))
+			}
+		} else {
+			// Incremental diff & patch
+			patches := Reconcile(oldVirtualContainer, virtualContainer)
+			r.applyPatches(container, patches, oldVirtualContainer, virtualContainer)
+		}
+	}
+
 	r.current = newTree
 }
 

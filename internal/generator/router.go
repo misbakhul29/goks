@@ -401,7 +401,7 @@ import (
 
 func main() {
 	router.InitClientRouter()
-	client.Mount("#app", &AppRouter{})
+	client.Mount("__goks", &AppRouter{})
 	select {}
 }
 `

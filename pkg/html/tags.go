@@ -134,3 +134,15 @@ func Path(children ...any) *component.Node { return Element("path", children...)
 func G(children ...any) *component.Node { return Element("g", children...) }
 func Circle(children ...any) *component.Node { return Element("circle", children...) }
 func Rect(children ...any) *component.Node { return Element("rect", children...) }
+
+// Document & Metadata Elements
+func Html(children ...any) *component.Node { return Element("html", children...) }
+func Head(children ...any) *component.Node { return Element("head", children...) }
+func Body(children ...any) *component.Node { return Element("body", children...) }
+func Title(children ...any) *component.Node { return Element("title", children...) }
+func Meta(children ...any) *component.Node { return Element("meta", children...) }
+func Link(children ...any) *component.Node { return Element("link", children...) }
+func Script(children ...any) *component.Node { return Element("script", children...) }
+func Style(children ...any) *component.Node { return Element("style", children...) }
+func Noscript(children ...any) *component.Node { return Element("noscript", children...) }
+func Base(children ...any) *component.Node { return Element("base", children...) }

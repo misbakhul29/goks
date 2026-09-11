@@ -15,6 +15,7 @@ var tmplLayout = `package app
 import (
 	"github.com/misbakhul29/goks/pkg/component"
 	"github.com/misbakhul29/goks/pkg/html"
+	"github.com/misbakhul29/goks/pkg/metadata"
 )
 
 // Layout acts as the root template (equivalent to layout.tsx)
@@ -23,11 +24,26 @@ type Layout struct {
 	Children component.Renderable
 }
 
+func (l *Layout) Metadata() metadata.Metadata {
+	return metadata.Metadata{
+		Title:         "{{.AppName}}",
+		TitleTemplate: "%s | {{.AppName}}",
+		Description:   "Modern fullstack web application built with GoKS and WebAssembly.",
+		OpenGraph: &metadata.OpenGraph{
+			Title:       "{{.AppName}}",
+			Description: "Modern fullstack web application built with GoKS and WebAssembly.",
+			Type:        "website",
+		},
+	}
+}
+
 func (l *Layout) Render() *component.Node {
 	return (
-		<div class="antialiased">
-			{l.Children}
-		</div>
+		<html lang="en">
+			<body class="antialiased">
+				{l.Children}
+			</body>
+		</html>
 	)
 }
 `

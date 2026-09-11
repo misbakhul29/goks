@@ -33,8 +33,8 @@ func RenderToString(node *Node) string {
 		sb.WriteString(node.Tag)
 
 		for k, v := range node.Props {
-			if strings.HasPrefix(k, "on") {
-				continue // Skip event listeners on the server
+			if strings.HasPrefix(k, "on") || k == "innerHTML" {
+				continue // Skip event listeners and innerHTML on element tag
 			}
 			if k == "className" {
 				k = "class"

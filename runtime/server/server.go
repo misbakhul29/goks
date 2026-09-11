@@ -21,6 +21,7 @@ import (
 	"github.com/misbakhul29/goks/internal/livereload"
 	"github.com/misbakhul29/goks/internal/watcher"
 	"github.com/misbakhul29/goks/pkg/component"
+	"github.com/misbakhul29/goks/pkg/metadata"
 	"github.com/misbakhul29/goks/pkg/router"
 	"github.com/misbakhul29/goks/pkg/rpc"
 )
@@ -206,23 +207,6 @@ func (s *DevServer) setupRoutes() {
 
 // serveShell renders the HTML shell that bootstraps the WASM app.
 func (s *DevServer) serveShell(ctx *router.Context) error {
-	var ssrContent string
-	if s.cfg.Root != nil {
-		ssrMutex.Lock()
-
-		// Temporarily set the path for SSR
-		originalPath := router.CurrentPath.Get()
-		router.CurrentPath.Set(ctx.Request().URL.Path)
-
-		node := s.cfg.Root.Render()
-		ssrContent = component.RenderToString(node)
-
-		// Restore
-		router.CurrentPath.Set(originalPath)
-
-		ssrMutex.Unlock()
-	}
-
 	lrScript := ""
 	if s.cfg.DevMode {
 		lrScript = livereload.Script()
@@ -239,8 +223,124 @@ func (s *DevServer) serveShell(ctx *router.Context) error {
 	envJSON, _ := json.Marshal(publicEnv)
 	envScript := fmt.Sprintf(`<script>window.__GOKS_ENV = %s;</script>`, string(envJSON))
 
-	html := shellHTML(lrScript, envScript, ssrContent)
+	if s.cfg.Root != nil {
+		ssrMutex.Lock()
+
+		// Temporarily set the path for SSR
+		originalPath := router.CurrentPath.Get()
+		router.CurrentPath.Set(ctx.Request().URL.Path)
+
+		// Expand the root component tree
+		renderedNode := component.Expand(component.C(s.cfg.Root), func() {}, nil)
+
+		// Restore path
+		router.CurrentPath.Set(originalPath)
+		ssrMutex.Unlock()
+
+		if renderedNode != nil && renderedNode.Tag == "html" {
+			meta := metadata.ExtractFromTree(component.C(s.cfg.Root))
+			if meta.Title == "" {
+				meta.Title = "GoKS App"
+			}
+			fullHTML := renderDocumentHTML(renderedNode, meta, envScript, lrScript)
+			return ctx.HTML(fullHTML)
+		}
+
+		// Fallback for non-html root
+		ssrContent := component.RenderToString(renderedNode)
+		return ctx.HTML(shellHTML(lrScript, envScript, ssrContent))
+	}
+
+	html := shellHTML(lrScript, envScript, "")
 	return ctx.HTML(html)
+}
+
+// renderDocumentHTML injects metadata, assets, and WASM runtime scripts into a root <html> element tree.
+func renderDocumentHTML(htmlNode *component.Node, meta metadata.Metadata, envScript, lrScript string) string {
+	var headNode *component.Node
+	var bodyNode *component.Node
+	var otherChildren []*component.Node
+
+	for _, ch := range htmlNode.Children {
+		if ch.Tag == "head" {
+			headNode = ch
+		} else if ch.Tag == "body" {
+			bodyNode = ch
+		} else {
+			otherChildren = append(otherChildren, ch)
+		}
+	}
+
+	// 1. Prepare <head>
+	metaHTML := metadata.RenderHTML(meta)
+	headAssets := `<link rel="stylesheet" href="/app.css" />` + "\n" + envScript + "\n"
+
+	if headNode == nil {
+		headNode = &component.Node{
+			Type: component.NodeTypeElement,
+			Tag:  "head",
+			Props: component.Props{
+				"innerHTML": metaHTML + headAssets,
+			},
+		}
+	} else {
+		// Preserve any custom head elements defined by the user
+		existingHTML := ""
+		for _, ch := range headNode.Children {
+			existingHTML += component.RenderToString(ch) + "\n"
+		}
+		headNode.Children = nil
+		headNode.Props["innerHTML"] = metaHTML + headAssets + existingHTML
+	}
+
+	// 2. Prepare <body>
+	wasmBootScript := `
+  <script src="/wasm_exec.js"></script>
+  <script>
+    const go = new Go();
+    WebAssembly.instantiateStreaming(fetch("/app.wasm"), go.importObject)
+      .then(result => {
+        go.run(result.instance);
+      })
+      .catch(err => {
+        console.error("Failed to load WASM:", err);
+      });
+  </script>
+  ` + lrScript
+
+	if bodyNode == nil {
+		bodyNode = &component.Node{
+			Type:     component.NodeTypeElement,
+			Tag:      "body",
+			Children: otherChildren,
+		}
+		otherChildren = nil
+	}
+
+	// Wrap body's component children inside <div id="__goks">
+	hasAppWrapper := false
+	if len(bodyNode.Children) == 1 && (bodyNode.Children[0].Props["id"] == "app" || bodyNode.Children[0].Props["id"] == "__goks") {
+		hasAppWrapper = true
+	}
+
+	var innerBodyHTML string
+	if hasAppWrapper {
+		innerBodyHTML = component.RenderToString(bodyNode.Children[0])
+	} else {
+		var sb strings.Builder
+		for _, ch := range bodyNode.Children {
+			sb.WriteString(component.RenderToString(ch))
+		}
+		innerBodyHTML = `<div id="__goks">` + sb.String() + `</div>`
+	}
+
+	bodyNode.Children = nil
+	bodyNode.Props["innerHTML"] = innerBodyHTML + wasmBootScript
+
+	// Reassemble htmlNode
+	htmlNode.Children = []*component.Node{headNode, bodyNode}
+
+	return "<!DOCTYPE html>\n" + component.RenderToString(htmlNode)
 }
 
 // compileWASM compiles the user's app to WebAssembly.
