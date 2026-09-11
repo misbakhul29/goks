@@ -117,12 +117,16 @@ func validateJSXContent(jsx string, baseOffset int, fullContent string) []Diagno
 		diagnostics = append(diagnostics, *diag)
 	}
 
+	// Sanitize naked & so text like "A & B" doesn't fail XML entity parser
+	sanitizedJSX := sanitizeNakedAmpersands(jsx)
+
 	// Use XML decoder with strict checking for tag balance
-	d := xml.NewDecoder(strings.NewReader(jsx))
+	d := xml.NewDecoder(strings.NewReader(sanitizedJSX))
 	d.Strict = true
 	d.Entity = xml.HTMLEntity
 
 	var tagStack []tagInfo
+	hasParseError := false
 
 	for {
 		tokenOffset := int(d.InputOffset())
@@ -131,6 +135,7 @@ func validateJSXContent(jsx string, baseOffset int, fullContent string) []Diagno
 			if err == io.EOF {
 				break
 			}
+			hasParseError = true
 			line, col := offsetToLineCol(fullContent, baseOffset+tokenOffset)
 			diagnostics = append(diagnostics, Diagnostic{
 				Range: Range{
@@ -166,6 +171,10 @@ func validateJSXContent(jsx string, baseOffset int, fullContent string) []Diagno
 				tagName = tok.Name.Space + "." + tok.Name.Local
 			}
 
+			if selfClosingTags[strings.ToLower(tagName)] {
+				continue // Do not pop from stack for void/self-closing tags (e.g. <br />, <img />)
+			}
+
 			if len(tagStack) == 0 {
 				line, col := offsetToLineCol(fullContent, baseOffset+tokenOffset)
 				diagnostics = append(diagnostics, Diagnostic{
@@ -196,20 +205,55 @@ func validateJSXContent(jsx string, baseOffset int, fullContent string) []Diagno
 		}
 	}
 
-	// Any unclosed tags remaining on the stack
-	for _, unclosed := range tagStack {
-		diagnostics = append(diagnostics, Diagnostic{
-			Range: Range{
-				Start: Position{Line: unclosed.line, Character: unclosed.character},
-				End:   Position{Line: unclosed.line, Character: unclosed.character + len(unclosed.name) + 2},
-			},
-			Severity: SeverityError,
-			Source:   "gox",
-			Message:  fmt.Sprintf("Unclosed tag <%s>", unclosed.name),
-		})
+	// Any unclosed tags remaining on the stack (only if parsed cleanly to EOF)
+	if !hasParseError {
+		for _, unclosed := range tagStack {
+			diagnostics = append(diagnostics, Diagnostic{
+				Range: Range{
+					Start: Position{Line: unclosed.line, Character: unclosed.character},
+					End:   Position{Line: unclosed.line, Character: unclosed.character + len(unclosed.name) + 2},
+				},
+				Severity: SeverityError,
+				Source:   "gox",
+				Message:  fmt.Sprintf("Unclosed tag <%s>", unclosed.name),
+			})
+		}
 	}
 
 	return diagnostics
+}
+
+func sanitizeNakedAmpersands(jsx string) string {
+	var sb strings.Builder
+	sb.Grow(len(jsx))
+
+	for i := 0; i < len(jsx); i++ {
+		if jsx[i] == '&' {
+			rest := jsx[i+1:]
+			isEntity := false
+			for _, ent := range []string{"amp;", "lt;", "gt;", "quot;", "apos;"} {
+				if strings.HasPrefix(rest, ent) {
+					isEntity = true
+					break
+				}
+			}
+			if !isEntity && strings.HasPrefix(rest, "#") {
+				semicolon := strings.Index(rest, ";")
+				if semicolon > 1 && semicolon < 10 {
+					isEntity = true
+				}
+			}
+
+			if isEntity {
+				sb.WriteByte('&')
+			} else {
+				sb.WriteByte(' ') // Replace naked & with space to keep exact byte length
+			}
+		} else {
+			sb.WriteByte(jsx[i])
+		}
+	}
+	return sb.String()
 }
 
 func checkUnclosedAttributes(jsx string, baseOffset int, fullContent string) *Diagnostic {
@@ -296,12 +340,14 @@ func offsetToLineCol(content string, offset int) (int, int) {
 	return line, col
 }
 
-var xmlErrRegex = regexp.MustCompile(`line \d+: `)
+var xmlPrefixRegex = regexp.MustCompile(`^XML syntax error on line \d+:\s*`)
 
 func cleanXMLError(errMsg string) string {
-	cleaned := xmlErrRegex.ReplaceAllString(errMsg, "")
-	if strings.Contains(cleaned, "syntax error") {
+	cleaned := xmlPrefixRegex.ReplaceAllString(errMsg, "")
+	cleaned = strings.TrimPrefix(cleaned, "XML syntax error: ")
+	cleaned = strings.TrimSpace(cleaned)
+	if len(cleaned) == 0 {
 		return "Malformed JSX/HTML syntax"
 	}
-	return cleaned
+	return strings.ToUpper(cleaned[:1]) + cleaned[1:]
 }

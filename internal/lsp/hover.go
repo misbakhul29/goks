@@ -69,23 +69,50 @@ func GetHover(content string, pos Position) *Hover {
 	}
 
 	line := lines[pos.Line]
-	word := getWordAtPosition(line, pos.Character)
+	word, startIdx, endIdx := getWordAndRangeAtPosition(line, pos.Character)
 	if word == "" {
 		return nil
 	}
 
-	// 1. Check HTML tags
-	lowerWord := strings.ToLower(word)
-	if doc, ok := elementDocs[lowerWord]; ok {
-		return &Hover{
-			Contents: MarkupContent{
-				Kind:  "markdown",
-				Value: fmt.Sprintf("### `<%s>` (HTML Element)\n\n%s", lowerWord, doc),
-			},
-		}
+	// Check if cursor is inside an HTML tag (< ... >)
+	prefix := line[:startIdx]
+	lastOpen := strings.LastIndex(prefix, "<")
+	lastClose := strings.LastIndex(prefix, ">")
+
+	insideTag := lastOpen != -1 && (lastClose == -1 || lastOpen > lastClose)
+	if !insideTag {
+		// Cursor is outside a tag (in plain text content or Go code)
+		return nil
 	}
 
-	// 2. Check HTML attributes
+	// Inside a tag: determine if word is the tag name (right after < or </)
+	trimmedAfterOpen := strings.TrimLeft(prefix[lastOpen+1:], "/")
+	trimmedAfterOpen = strings.TrimSpace(trimmedAfterOpen)
+	isTagName := trimmedAfterOpen == "" || trimmedAfterOpen == word
+
+	if isTagName {
+		lowerWord := strings.ToLower(word)
+		if doc, ok := elementDocs[lowerWord]; ok {
+			return &Hover{
+				Contents: MarkupContent{
+					Kind:  "markdown",
+					Value: fmt.Sprintf("### `<%s>` (HTML Element)\n\n%s", lowerWord, doc),
+				},
+			}
+		}
+
+		if strings.HasPrefix(word, "c.") || (len(word) > 1 && strings.ToUpper(word[:1]) == word[:1]) {
+			return &Hover{
+				Contents: MarkupContent{
+					Kind:  "markdown",
+					Value: fmt.Sprintf("### `<%s>` (GoKS Component)\n\nCustom reusable component rendered via `component.C(...)`.", word),
+				},
+			}
+		}
+		return nil
+	}
+
+	// Word is an attribute name inside the tag
 	if doc, ok := attrDocs[word]; ok {
 		return &Hover{
 			Contents: MarkupContent{
@@ -95,27 +122,18 @@ func GetHover(content string, pos Position) *Hover {
 		}
 	}
 
-	// 3. Check custom component (e.g. c.Hero or Hero)
-	if strings.HasPrefix(word, "c.") || (len(word) > 1 && strings.ToUpper(word[:1]) == word[:1] && !strings.Contains(word, " ")) {
-		return &Hover{
-			Contents: MarkupContent{
-				Kind:  "markdown",
-				Value: fmt.Sprintf("### `%s` (GoKS Component)\n\nCustom reusable component rendered via `component.C(...)`.", word),
-			},
-		}
-	}
-
+	_ = endIdx
 	return nil
 }
 
-var wordRegex = regexp.MustCompile(`[a-zA-Z0-9_.:]+`)
+var wordRegex = regexp.MustCompile(`[a-zA-Z0-9_.:-]+`)
 
-func getWordAtPosition(line string, charIdx int) string {
+func getWordAndRangeAtPosition(line string, charIdx int) (string, int, int) {
 	matches := wordRegex.FindAllStringIndex(line, -1)
 	for _, m := range matches {
 		if charIdx >= m[0] && charIdx <= m[1] {
-			return line[m[0]:m[1]]
+			return line[m[0]:m[1]], m[0], m[1]
 		}
 	}
-	return ""
+	return "", 0, 0
 }
