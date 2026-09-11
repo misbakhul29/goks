@@ -96,7 +96,7 @@
           "match": "="
         },
         {
-          "name": "entity.other.attribute-name.html",
+          "name": "entity.other.attribute-name.class.css entity.other.attribute-name.html",
           "match": "\\b([a-zA-Z0-9_:-]+)"
         }
       ]
