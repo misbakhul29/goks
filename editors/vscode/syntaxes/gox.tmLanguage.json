@@ -4,109 +4,163 @@
   "scopeName": "source.gox",
   "patterns": [
     {
-      "include": "#jsx-block"
+      "include": "#jsx-element"
     },
     {
       "include": "source.go"
     }
   ],
   "repository": {
-    "jsx-block": {
-      "begin": "(return\\s*\\()",
+    "jsx-element": {
+      "patterns": [
+        {
+          "include": "#jsx-comment"
+        },
+        {
+          "include": "#jsx-tag-closing"
+        },
+        {
+          "include": "#jsx-tag-open-or-selfclosing"
+        },
+        {
+          "include": "#jsx-expression"
+        }
+      ]
+    },
+    "jsx-comment": {
+      "name": "comment.block.html",
+      "begin": "<!--",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.comment.html"
+        }
+      },
+      "end": "-->",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.comment.html"
+        }
+      }
+    },
+    "jsx-tag-closing": {
+      "name": "meta.tag.other.html",
+      "match": "(</)([a-zA-Z0-9_.:-]+)(\\s*)(>)",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.tag.begin.html"
+        },
+        "2": {
+          "name": "entity.name.tag.html"
+        },
+        "4": {
+          "name": "punctuation.definition.tag.end.html"
+        }
+      }
+    },
+    "jsx-tag-open-or-selfclosing": {
+      "name": "meta.tag.other.html",
+      "begin": "(<)([a-zA-Z0-9_.:-]+)(?=[\\s/>])",
       "beginCaptures": {
         "1": {
-          "name": "keyword.control.go"
+          "name": "punctuation.definition.tag.begin.html"
+        },
+        "2": {
+          "name": "entity.name.tag.html"
         }
       },
-      "end": "(\\))",
+      "end": "(/?>)",
       "endCaptures": {
         "1": {
-          "name": "punctuation.section.parens.end.gox"
+          "name": "punctuation.definition.tag.end.html"
         }
       },
       "patterns": [
         {
-          "include": "#jsx-tag"
+          "include": "#jsx-attributes"
         }
       ]
     },
-    "jsx-tag": {
+    "jsx-attributes": {
       "patterns": [
         {
-          "name": "tag.open.gox",
-          "begin": "(</?)([a-zA-Z0-9_.:]+)",
-          "beginCaptures": {
-            "1": {
-              "name": "punctuation.definition.tag.begin.gox"
-            },
-            "2": {
-              "name": "entity.name.tag.gox"
-            }
-          },
-          "end": "(/?>)",
-          "endCaptures": {
-            "1": {
-              "name": "punctuation.definition.tag.end.gox"
-            }
-          },
-          "patterns": [
-            {
-              "include": "#jsx-attribute"
-            }
-          ]
+          "include": "#jsx-string-double"
+        },
+        {
+          "include": "#jsx-string-single"
         },
         {
           "include": "#jsx-expression"
+        },
+        {
+          "name": "punctuation.separator.key-value.html",
+          "match": "="
+        },
+        {
+          "name": "entity.other.attribute-name.html",
+          "match": "\\b([a-zA-Z0-9_:-]+)"
         }
       ]
     },
-    "jsx-attribute": {
+    "jsx-string-double": {
+      "name": "string.quoted.double.html",
+      "begin": "\"",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.begin.html"
+        }
+      },
+      "end": "\"",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.end.html"
+        }
+      },
       "patterns": [
         {
-          "name": "entity.other.attribute-name.gox",
-          "match": "\\b([a-zA-Z0-9_:-]+)(?=\\=)"
-        },
+          "name": "constant.character.escape.html",
+          "match": "\\\\."
+        }
+      ]
+    },
+    "jsx-string-single": {
+      "name": "string.quoted.single.html",
+      "begin": "'",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.begin.html"
+        }
+      },
+      "end": "'",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.end.html"
+        }
+      },
+      "patterns": [
         {
-          "name": "string.quoted.double.gox",
-          "begin": "\"",
-          "end": "\"",
-          "patterns": [
-            {
-              "name": "constant.character.escape.gox",
-              "match": "\\\\."
-            }
-          ]
-        },
-        {
-          "name": "string.quoted.single.gox",
-          "begin": "'",
-          "end": "'",
-          "patterns": [
-            {
-              "name": "constant.character.escape.gox",
-              "match": "\\\\."
-            }
-          ]
-        },
-        {
-          "include": "#jsx-expression"
+          "name": "constant.character.escape.html",
+          "match": "\\\\."
         }
       ]
     },
     "jsx-expression": {
+      "name": "meta.embedded.expression.gox",
       "begin": "\\{",
       "beginCaptures": {
         "0": {
-          "name": "punctuation.section.embedded.begin.gox"
+          "name": "punctuation.section.embedded.begin.tsx"
         }
       },
       "end": "\\}",
       "endCaptures": {
         "0": {
-          "name": "punctuation.section.embedded.end.gox"
+          "name": "punctuation.section.embedded.end.tsx"
         }
       },
       "patterns": [
+        {
+          "include": "#jsx-expression"
+        },
         {
           "include": "source.go"
         }
