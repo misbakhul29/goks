@@ -2,7 +2,7 @@
   "name": "goks-gox",
   "displayName": "GoKS GOX Language Support",
   "description": "Language support, syntax highlighting, and LSP integration for GoKS (.gox) files",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "publisher": "misbakhul29",
   "engines": {
     "vscode": "^1.75.0"
