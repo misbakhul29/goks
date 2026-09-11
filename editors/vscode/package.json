@@ -2,7 +2,7 @@
   "name": "goks-gox",
   "displayName": "GoKS GOX Language Support",
   "description": "Language support, syntax highlighting, and LSP integration for GoKS (.gox) files",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "publisher": "misbakhul29",
   "engines": {
     "vscode": "^1.75.0"
@@ -38,26 +38,15 @@
         "language": "gox",
         "scopeName": "source.gox",
         "path": "./syntaxes/gox.tmLanguage.json"
+      },
+      {
+        "scopeName": "gox.injection",
+        "path": "./syntaxes/gox.injection.tmLanguage.json",
+        "injectTo": [
+          "source.gox"
+        ]
       }
-    ],
-    "configurationDefaults": {
-      "[gox]": {
-        "editor.tokenColorCustomizations": {
-          "textMateRules": [
-            {
-              "scope": [
-                "entity.other.attribute-name",
-                "entity.other.attribute-name.html",
-                "entity.other.attribute-name.class.css"
-              ],
-              "settings": {
-                "foreground": "#d7ba7d"
-              }
-            }
-          ]
-        }
-      }
-    }
+    ]
   },
   "dependencies": {
     "vscode-languageclient": "^10.1.1"

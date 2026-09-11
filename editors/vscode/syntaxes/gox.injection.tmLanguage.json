@@ -1,0 +1,10 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "scopeName": "gox.injection",
+  "injectionSelector": "L:source.gox",
+  "patterns": [
+    {
+      "include": "source.gox#jsx-element"
+    }
+  ]
+}

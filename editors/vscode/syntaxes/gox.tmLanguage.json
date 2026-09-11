@@ -21,9 +21,6 @@
         },
         {
           "include": "#jsx-tag-open-or-selfclosing"
-        },
-        {
-          "include": "#jsx-expression"
         }
       ]
     },
