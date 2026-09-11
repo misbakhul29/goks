@@ -10,12 +10,21 @@
   "categories": [
     "Programming Languages"
   ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguage:gox"
+  ],
   "contributes": {
     "languages": [
       {
         "id": "gox",
-        "aliases": ["GoKS GOX", "gox"],
-        "extensions": [".gox"],
+        "aliases": [
+          "GoKS GOX",
+          "gox"
+        ],
+        "extensions": [
+          ".gox"
+        ],
         "configuration": "./language-configuration.json"
       }
     ],
@@ -26,5 +35,8 @@
         "path": "./syntaxes/gox.tmLanguage.json"
       }
     ]
+  },
+  "dependencies": {
+    "vscode-languageclient": "^10.1.1"
   }
 }
