@@ -21,6 +21,33 @@ import (
 	"sync"
 )
 
+// Classes joins the CSS variable names of the given fonts and any extra class
+// strings into a single space-separated string, ready to use in a GOX class attribute.
+//
+// Usage (equivalent to Next.js template literals):
+//
+//	<body class={google.Classes(geistSans, fontGlitch, "antialiased")}>
+//
+// Each *Font argument contributes its CSS variable name (e.g. "--font-geist-sans").
+// String arguments are passed through as-is (e.g. "antialiased", "dark").
+func Classes(parts ...any) string {
+	var classes []string
+	for _, p := range parts {
+		switch v := p.(type) {
+		case *Font:
+			if v != nil {
+				classes = append(classes, v.variable)
+			}
+		case string:
+			if v != "" {
+				classes = append(classes, v)
+			}
+		}
+	}
+	return strings.Join(classes, " ")
+}
+
+
 // Options configures how a Google Font is loaded.
 type Options struct {
 	// Variable is the CSS custom property name that will hold the font-family value.
@@ -89,7 +116,8 @@ func (f *Font) HeadHTML() string {
 	sb.WriteString(`  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />` + "\n")
 
 	// Load the font stylesheet
-	sb.WriteString(fmt.Sprintf(`  <link rel="stylesheet" href="%s" />`, googleFontsURL) + "\n")
+	sb.WriteString(fmt.Sprintf(`  <link rel="stylesheet" href="%s" />`, googleFontsURL))
+	sb.WriteString("\n")
 
 	// Declare the CSS variable and class
 	display := f.display

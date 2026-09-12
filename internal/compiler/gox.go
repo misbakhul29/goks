@@ -186,21 +186,75 @@ func Transpile(content string) (string, error) {
 	return content, nil
 }
 
+// extractAttrExprs scans a GOX XML string for ={...} attribute expressions,
+// replaces each with a safe placeholder (no quotes, no XML-special chars), and
+// returns the substituted string along with a map of placeholder→original expr.
+//
+// This allows the XML decoder to parse GOX attributes that contain arbitrary Go
+// expressions (e.g. string concatenation with `"`, function calls, etc.) without
+// choking on unescaped quote characters.
+func extractAttrExprs(xmlStr string) (string, map[string]string) {
+	placeholders := make(map[string]string)
+	var result strings.Builder
+	i := 0
+	count := 0
+
+	for i < len(xmlStr) {
+		if i+1 < len(xmlStr) && xmlStr[i] == '=' && xmlStr[i+1] == '{' {
+			result.WriteByte('=') // keep the '='
+			i++                  // skip '='
+
+			// Collect balanced {…} expression (handles nesting)
+			depth := 0
+			start := i
+			for i < len(xmlStr) {
+				ch := xmlStr[i]
+				if ch == '{' {
+					depth++
+				} else if ch == '}' {
+					depth--
+					if depth == 0 {
+						i++
+						break
+					}
+				}
+				i++
+			}
+			expr := xmlStr[start:i] // includes surrounding { }
+
+			key := fmt.Sprintf("GOKSEXPR%d", count)
+			count++
+			placeholders[key] = expr
+			// Write a safe, double-quoted placeholder the XML decoder can handle
+			result.WriteString(`"` + key + `"`)
+		} else {
+			result.WriteByte(xmlStr[i])
+			i++
+		}
+	}
+
+	return result.String(), placeholders
+}
+
 func parseXMLToGo(xmlStr string) (string, error) {
 	if xmlStr == "" {
 		return "", nil
 	}
 
-	d := xml.NewDecoder(strings.NewReader(xmlStr))
+	// Pre-process: replace ={...} attribute expressions with safe placeholders
+	// so the XML decoder doesn't trip over quotes or special chars inside {}.
+	processed, placeholders := extractAttrExprs(xmlStr)
+
+	d := xml.NewDecoder(strings.NewReader(processed))
 	// Allow unescaped HTML characters and unknown entities
 	d.Strict = false
 	d.AutoClose = xml.HTMLAutoClose
 	d.Entity = xml.HTMLEntity
 
-	return parseNode(d)
+	return parseNode(d, placeholders)
 }
 
-func parseNode(d *xml.Decoder) (string, error) {
+func parseNode(d *xml.Decoder, placeholders map[string]string) (string, error) {
 	var children []string
 
 	for {
@@ -222,12 +276,12 @@ func parseNode(d *xml.Decoder) (string, error) {
 			}
 
 			// Parse children recursively
-			inner, err := parseNode(d)
+			inner, err := parseNode(d, placeholders)
 			if err != nil {
 				return "", err
 			}
 
-			goCode := formatGoNode(tag, token.Attr, inner)
+			goCode := formatGoNode(tag, token.Attr, inner, placeholders)
 			children = append(children, goCode)
 
 		case xml.EndElement:
@@ -249,7 +303,23 @@ func parseNode(d *xml.Decoder) (string, error) {
 	return strings.Join(children, ", "), nil
 }
 
-func formatGoNode(tag string, attrs []xml.Attr, inner string) string {
+// resolveAttrVal checks whether val is a placeholder (from extractAttrExprs).
+// If so, it returns (innerExpr, true) where innerExpr is the Go expression
+// without surrounding braces. Otherwise it returns ("", false).
+func resolveAttrVal(val string, placeholders map[string]string) (string, bool) {
+	if expr, ok := placeholders[val]; ok {
+		// expr is "{...}" — strip the outer braces
+		return expr[1 : len(expr)-1], true
+	}
+	// Also handle the original {expr} syntax for text-content attributes
+	// that weren't pre-processed (shouldn't happen after extractAttrExprs, kept for safety)
+	if strings.HasPrefix(val, "{") && strings.HasSuffix(val, "}") {
+		return val[1 : len(val)-1], true
+	}
+	return "", false
+}
+
+func formatGoNode(tag string, attrs []xml.Attr, inner string, placeholders map[string]string) string {
 	isComponent := strings.Contains(tag, ".")
 
 	var goTag string
@@ -261,41 +331,41 @@ func formatGoNode(tag string, attrs []xml.Attr, inner string) string {
 
 	var res string
 	if isComponent {
-		// Component instantiation: component.C(&c.Hero{Attr1: "val", ...})
+		// Component instantiation: component.C(&c.Hero{Attr1: val, ...})
 		props := []string{}
 		for _, a := range attrs {
 			val := a.Value
-			// if value is {expr}, don't quote it
-			if strings.HasPrefix(val, "{") && strings.HasSuffix(val, "}") {
-				props = append(props, fmt.Sprintf("%s: %s", a.Name.Local, val[1:len(val)-1]))
+			if expr, isDynamic := resolveAttrVal(val, placeholders); isDynamic {
+				props = append(props, fmt.Sprintf("%s: %s", a.Name.Local, expr))
 			} else {
 				props = append(props, fmt.Sprintf("%s: %q", a.Name.Local, val))
 			}
 		}
 		res = fmt.Sprintf("component.C(&%s{%s})", goTag, strings.Join(props, ", "))
 	} else {
-		// HTML Element: html.Div(inner)
+		// HTML element: html.Div(inner)
 		res = fmt.Sprintf("%s(%s)", goTag, inner)
 
 		for _, a := range attrs {
 			name := a.Name.Local
 			val := a.Value
+			expr, isDynamic := resolveAttrVal(val, placeholders)
 
 			if name == "class" {
-				if strings.HasPrefix(val, "{") && strings.HasSuffix(val, "}") {
-					res += fmt.Sprintf(`.Class(%s)`, val[1:len(val)-1])
+				if isDynamic {
+					res += fmt.Sprintf(`.Class(%s)`, expr)
 				} else {
 					res += fmt.Sprintf(`.Class(%q)`, val)
 				}
 			} else if name == "id" {
-				if strings.HasPrefix(val, "{") && strings.HasSuffix(val, "}") {
-					res += fmt.Sprintf(`.ID(%s)`, val[1:len(val)-1])
+				if isDynamic {
+					res += fmt.Sprintf(`.ID(%s)`, expr)
 				} else {
 					res += fmt.Sprintf(`.ID(%q)`, val)
 				}
 			} else {
-				if strings.HasPrefix(val, "{") && strings.HasSuffix(val, "}") {
-					res += fmt.Sprintf(`.Attr(%q, %s)`, name, val[1:len(val)-1])
+				if isDynamic {
+					res += fmt.Sprintf(`.Attr(%q, %s)`, name, expr)
 				} else {
 					res += fmt.Sprintf(`.Attr(%q, %q)`, name, val)
 				}
