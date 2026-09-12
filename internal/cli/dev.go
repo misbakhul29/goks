@@ -226,7 +226,9 @@ func compileWasmAndServer(appDir string) ([]byte, error) {
 	// Run go mod tidy in entryDir
 	tidyCmd := exec.Command("go", "mod", "tidy")
 	tidyCmd.Dir = entryDir
-	_ = tidyCmd.Run()
+	if out, err := tidyCmd.CombinedOutput(); err != nil {
+		return out, err
+	}
 
 	// Compile WASM
 	outDir := filepath.Join(appDir, ".goks", "build")
