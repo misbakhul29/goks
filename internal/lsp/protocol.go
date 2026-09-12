@@ -188,14 +188,16 @@ const (
 )
 
 type CompletionItem struct {
-	Label            string             `json:"label"`
-	Kind             CompletionItemKind `json:"kind,omitempty"`
-	Detail           string             `json:"detail,omitempty"`
-	Documentation    any                `json:"documentation,omitempty"` // string or MarkupContent
-	InsertText       string             `json:"insertText,omitempty"`
-	InsertTextFormat InsertTextFormat   `json:"insertTextFormat,omitempty"`
-	SortText         string             `json:"sortText,omitempty"`
+	Label               string             `json:"label"`
+	Kind                CompletionItemKind `json:"kind,omitempty"`
+	Detail              string             `json:"detail,omitempty"`
+	Documentation       any                `json:"documentation,omitempty"` // string or MarkupContent
+	InsertText          string             `json:"insertText,omitempty"`
+	InsertTextFormat    InsertTextFormat   `json:"insertTextFormat,omitempty"`
+	SortText            string             `json:"sortText,omitempty"`
+	AdditionalTextEdits []TextEdit         `json:"additionalTextEdits,omitempty"`
 }
+
 
 type CompletionList struct {
 	IsIncomplete bool             `json:"isIncomplete"`

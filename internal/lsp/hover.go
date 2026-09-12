@@ -81,9 +81,67 @@ func GetHover(content string, pos Position) *Hover {
 
 	insideTag := lastOpen != -1 && (lastClose == -1 || lastOpen > lastClose)
 	if !insideTag {
-		// Cursor is outside a tag (in plain text content or Go code)
+		// Cursor is outside a tag (in Go code or imports)
+		cleanWord := strings.Trim(word, "\"`")
+
+		// 1. Check if word is or contains an import path
+		for _, pkg := range goksPackages {
+			if strings.Contains(cleanWord, pkg.ImportPath) {
+				return &Hover{
+					Contents: MarkupContent{
+						Kind:  "markdown",
+						Value: fmt.Sprintf("### Package `%s`\n`%s`\n\n%s", pkg.Name, pkg.ImportPath, pkg.Description),
+					},
+				}
+			}
+		}
+
+		// 2. Check if word is a package name (e.g. "router", "google")
+		for _, pkg := range goksPackages {
+			if pkg.Name == cleanWord {
+				return &Hover{
+					Contents: MarkupContent{
+						Kind:  "markdown",
+						Value: fmt.Sprintf("### Package `%s`\n`%s`\n\n%s\n\n```go\nimport %q\n```", pkg.Name, pkg.ImportPath, pkg.Description, pkg.ImportPath),
+					},
+				}
+			}
+		}
+
+		// 3. Check if word is pkg.Member or a Member name
+		parts := strings.Split(cleanWord, ".")
+		targetPkg := ""
+		targetMember := cleanWord
+		if len(parts) == 2 {
+			targetPkg = parts[0]
+			targetMember = parts[1]
+		}
+
+		for _, pkg := range goksPackages {
+			if targetPkg != "" && pkg.Name != targetPkg {
+				continue
+			}
+			for _, m := range pkg.Members {
+				cleanMName := strings.TrimSuffix(m.Name, "()")
+				cleanMName = strings.TrimSuffix(cleanMName, "(path)")
+				cleanMName = strings.TrimSuffix(cleanMName, "(opt)")
+				cleanMName = strings.TrimSuffix(cleanMName, "(initial)")
+				cleanMName = strings.TrimSuffix(cleanMName, "(parts...)")
+
+				if m.Name == targetMember || cleanMName == targetMember || cleanMName == strings.TrimSuffix(targetMember, "()") {
+					return &Hover{
+						Contents: MarkupContent{
+							Kind:  "markdown",
+							Value: fmt.Sprintf("### `%s.%s`\n`%s`\n\n%s\n\n```go\nimport %q\n```", pkg.Name, cleanMName, m.Detail, m.Doc, pkg.ImportPath),
+						},
+					}
+				}
+			}
+		}
+
 		return nil
 	}
+
 
 	// Inside a tag: determine if word is the tag name (right after < or </)
 	trimmedAfterOpen := strings.TrimLeft(prefix[lastOpen+1:], "/")

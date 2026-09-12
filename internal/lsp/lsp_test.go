@@ -175,7 +175,53 @@ func (l *Layout) Render() *component.Node {
 	if !foundOnClick {
 		t.Errorf("expected 'onClick' in attribute completions, got: %v", attrItems)
 	}
+
+	// Test Go code completion: user typed "r := router"
+	goContent := `package app
+func (p *Page) handleClick() {
+	r := router
 }
+`
+	goItems := GetCompletions(goContent, Position{Line: 2, Character: 12}, "file:///app/page.gox")
+	if len(goItems) == 0 {
+		t.Fatalf("expected Go code completions, got 0")
+	}
+
+	foundRouter := false
+	for _, item := range goItems {
+		if item.Label == "router" {
+			foundRouter = true
+			if !strings.Contains(item.Detail, "github.com/misbakhul29/goks/pkg/router") {
+				t.Errorf("expected router detail to contain import path, got %q", item.Detail)
+			}
+			if len(item.AdditionalTextEdits) == 0 {
+				t.Errorf("expected AdditionalTextEdits for auto-importing router, got 0")
+			}
+		}
+	}
+	if !foundRouter {
+		t.Errorf("expected 'router' in Go code completions, got: %v", goItems)
+	}
+
+	// Test Dot completion: user typed "router."
+	dotContent := `package app
+func (p *Page) handleClick() {
+	router.
+}
+`
+	dotItems := GetCompletions(dotContent, Position{Line: 2, Character: 8}, "file:///app/page.gox")
+	foundUseRouter := false
+	for _, item := range dotItems {
+		if item.Label == "UseRouter()" {
+			foundUseRouter = true
+			break
+		}
+	}
+	if !foundUseRouter {
+		t.Errorf("expected 'UseRouter()' in dot completions, got: %v", dotItems)
+	}
+}
+
 
 func TestGetHover(t *testing.T) {
 	content := `package app
@@ -200,7 +246,22 @@ func (l *Layout) Render() *component.Node {
 	if !strings.Contains(hoverAttr.Contents.Value, "class") {
 		t.Errorf("expected hover value to contain 'class', got %s", hoverAttr.Contents.Value)
 	}
+
+	// Hover over package name in Go code
+	goHoverContent := `package app
+func (p *Page) handleClick() {
+	r := router.UseRouter()
 }
+`
+	hoverPkg := GetHover(goHoverContent, Position{Line: 2, Character: 8}) // hovering over "router"
+	if hoverPkg == nil {
+		t.Fatalf("expected hover info for router, got nil")
+	}
+	if !strings.Contains(hoverPkg.Contents.Value, "github.com/misbakhul29/goks/pkg/router") {
+		t.Errorf("expected hover value to contain router import path, got %s", hoverPkg.Contents.Value)
+	}
+}
+
 
 func TestServer_Initialize(t *testing.T) {
 	server := NewServer()
