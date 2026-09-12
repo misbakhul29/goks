@@ -21,6 +21,23 @@ func InitClientRouter() {
 		CurrentPath.Set(path)
 	}
 
+	// Override Replace for WASM
+	Replace = func(path string) {
+		js.Global().Get("window").Get("history").Call("replaceState", nil, "", path)
+		CurrentPath.Set(path)
+	}
+
+	// Override Back for WASM
+	Back = func() {
+		js.Global().Get("window").Get("history").Call("back")
+	}
+
+	// Override Forward for WASM
+	Forward = func() {
+		js.Global().Get("window").Get("history").Call("forward")
+	}
+
+
 	window.Call("addEventListener", "popstate", js.FuncOf(func(_ js.Value, _ []js.Value) any {
 		CurrentPath.Set(window.Get("location").Get("pathname").String())
 		return nil

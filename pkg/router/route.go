@@ -12,6 +12,61 @@ var Push = func(path string) {
 	CurrentPath.Set(path)
 }
 
+// Replace navigates to a new path replacing the current history entry (overridden in WASM).
+var Replace = func(path string) {
+	CurrentPath.Set(path)
+}
+
+// Back navigates back to the previous page in history (overridden in WASM).
+var Back = func() {}
+
+// Forward navigates forward to the next page in history (overridden in WASM).
+var Forward = func() {}
+
+// Path returns the current URL pathname.
+func Path() string {
+	return CurrentPath.Get()
+}
+
+// ClientRouter provides Next.js-like useRouter methods for programmatic navigation.
+type ClientRouter struct{}
+
+// UseRouter returns a ClientRouter instance for navigation.
+//
+// Example:
+//
+//	r := router.UseRouter()
+//	r.Push("/login")
+func UseRouter() *ClientRouter {
+	return &ClientRouter{}
+}
+
+// Push navigates to the specified URL path and pushes to browser history.
+func (r *ClientRouter) Push(path string) {
+	Push(path)
+}
+
+// Replace navigates to the specified URL path replacing the current history entry.
+func (r *ClientRouter) Replace(path string) {
+	Replace(path)
+}
+
+// Back navigates back to the previous page in history.
+func (r *ClientRouter) Back() {
+	Back()
+}
+
+// Forward navigates forward to the next page in history.
+func (r *ClientRouter) Forward() {
+	Forward()
+}
+
+// Path returns the current URL pathname.
+func (r *ClientRouter) Path() string {
+	return CurrentPath.Get()
+}
+
+
 // PageRoute is a UI component that renders its child only if the current path matches.
 // Works for both SSR (backend) and SPA (WASM client).
 type PageRoute struct {

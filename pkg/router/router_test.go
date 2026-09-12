@@ -161,3 +161,31 @@ func TestRouter_Group(t *testing.T) {
 		t.Fatalf("expected 'pong', got %q", w.Body.String())
 	}
 }
+
+func TestUseRouter(t *testing.T) {
+	r := router.UseRouter()
+	if r == nil {
+		t.Fatal("expected non-nil router")
+	}
+
+	r.Push("/dashboard")
+	if r.Path() != "/dashboard" {
+		t.Fatalf("expected path '/dashboard', got %q", r.Path())
+	}
+
+	r.Replace("/settings")
+	if r.Path() != "/settings" {
+		t.Fatalf("expected path '/settings', got %q", r.Path())
+	}
+
+	// Direct router package helpers
+	router.Push("/profile")
+	if router.Path() != "/profile" {
+		t.Fatalf("expected path '/profile', got %q", router.Path())
+	}
+
+	// Back and forward (safe no-op in non-wasm environment)
+	r.Back()
+	r.Forward()
+}
+
