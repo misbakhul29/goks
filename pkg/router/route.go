@@ -1,8 +1,12 @@
 package router
 
 import (
+	"path/filepath"
+	"strings"
+
 	"github.com/misbakhul29/goks/pkg/component"
 )
+
 
 // CurrentPath is a global store holding the current URL path.
 var CurrentPath = component.NewStore("/")
@@ -106,3 +110,72 @@ func (r *PageRoute) Render() *component.Node {
 	}
 	return component.Text("")
 }
+
+// HasFileExtension returns true if path appears to be a static file asset (e.g. /Resume.pdf, /image.png).
+func HasFileExtension(path string) bool {
+	clean := strings.Split(strings.Split(path, "?")[0], "#")[0]
+	ext := filepath.Ext(clean)
+	return len(ext) > 1
+}
+
+// MatchPath checks if current URL path matches a route pattern.
+func MatchPath(pattern, current string, exact bool) bool {
+	if exact {
+		if pattern == current {
+			return true
+		}
+		patParts := strings.Split(strings.Trim(pattern, "/"), "/")
+		curParts := strings.Split(strings.Trim(current, "/"), "/")
+		if len(patParts) != len(curParts) {
+			return false
+		}
+		for i := range patParts {
+			if strings.HasPrefix(patParts[i], ":") {
+				continue
+			}
+			if patParts[i] != curParts[i] {
+				return false
+			}
+		}
+		return true
+	}
+	// Prefix match for nested layouts
+	return current == pattern || (len(current) > len(pattern) && current[:len(pattern)] == pattern && current[len(pattern)] == '/')
+}
+
+// MatchAnyRoute returns true if current path matches any of the registered route patterns.
+func MatchAnyRoute(patterns []string, current string) bool {
+	for _, p := range patterns {
+		if MatchPath(p, current, true) {
+			return true
+		}
+	}
+	return false
+}
+
+// DefaultNotFound is the fallback component rendered when a route is not found and app/not-found.gox is not defined.
+type DefaultNotFound struct {
+	component.ComponentBase
+}
+
+func (n *DefaultNotFound) Render() *component.Node {
+	return component.H("div", component.Props{
+		"style": "min-height: 60vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; font-family: system-ui, -apple-system, sans-serif; padding: 2rem;",
+	},
+		component.H("div", component.Props{
+			"style": "display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;",
+		},
+			component.H("h1", component.Props{
+				"style": "font-size: 2.25rem; font-weight: 800; margin: 0; padding-right: 1.25rem; border-right: 1px solid #9ca3af; color: #1f2937;",
+			}, component.Text("404")),
+			component.H("p", component.Props{
+				"style": "font-size: 1rem; color: #4b5563; margin: 0;",
+			}, component.Text("This page could not be found.")),
+		),
+		component.H("a", component.Props{
+			"href":  "/",
+			"style": "display: inline-block; padding: 0.5rem 1.25rem; background-color: #2563eb; color: #ffffff; border-radius: 0.375rem; text-decoration: none; font-size: 0.875rem; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.1);",
+		}, component.Text("Return Home")),
+	)
+}
+

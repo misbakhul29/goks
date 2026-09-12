@@ -12,13 +12,15 @@ import (
 )
 
 type RouteNode struct {
-	Path       string // e.g., "/" or "/about"
-	PkgName    string // e.g., "pkg_about"
-	ImportPath string // e.g., "github.com/user/test/app/about"
-	HasPage    bool
-	HasLayout  bool
-	Children   []*RouteNode
+	Path        string // e.g., "/" or "/about"
+	PkgName     string // e.g., "pkg_about"
+	ImportPath  string // e.g., "github.com/user/test/app/about"
+	HasPage     bool
+	HasLayout   bool
+	HasNotFound bool
+	Children    []*RouteNode
 }
+
 
 // GetModuleName extracts the module name from go.mod
 func GetModuleName(appDir string) (string, error) {
@@ -183,6 +185,12 @@ func checkFiles(dir string, node *RouteNode) {
 	} else if _, err := os.Stat(filepath.Join(dir, "layout.gox")); err == nil {
 		node.HasLayout = true
 	}
+
+	if _, err := os.Stat(filepath.Join(dir, "not-found.go")); err == nil {
+		node.HasNotFound = true
+	} else if _, err := os.Stat(filepath.Join(dir, "not-found.gox")); err == nil {
+		node.HasNotFound = true
+	}
 }
 
 // insertNode inserts a node into the tree based on path hierarchy
@@ -219,24 +227,47 @@ import (
 	{{end}}
 )
 
+var registeredPageRoutes = []string{
+	{{range .PageRoutes}}"{{.}}",
+	{{end}}
+}
+
 // AppRouter is the generated file-based router.
 type AppRouter struct {
 	component.ComponentBase
 	{{range .Fields}}
 	{{.Name}} {{.Type}}
 	{{end}}
+	not_found component.Renderable
+}
+
+func (r *AppRouter) HasMatchedPage(path string) bool {
+	return router.MatchAnyRoute(registeredPageRoutes, path)
 }
 
 func (r *AppRouter) Render() *component.Node {
-	return {{.RenderCode}}
+	current := router.CurrentPath.Get()
+	var children *component.Node
+	if !r.HasMatchedPage(current) {
+		children = component.C(r.get_not_found())
+	} else {
+		children = {{.ChildrenCode}}
+	}
+	{{if .HasRootLayout}}
+	return component.C(r.get_layout_pkg_root(children))
+	{{else}}
+	return children
+	{{end}}
 }
 `
 
 type TmplData struct {
-	ModuleName string
-	Imports    []Import
-	Fields     []Field
-	RenderCode string
+	ModuleName    string
+	Imports       []Import
+	Fields        []Field
+	ChildrenCode  string
+	HasRootLayout bool
+	PageRoutes    []string
 }
 
 type Field struct {
@@ -256,13 +287,18 @@ func writeRouterFile(entryDir string, rootNode *RouteNode, moduleName string) er
 	var fields []Field
 	collectFields(rootNode, &fields)
 
-	renderCode := generateRenderCode(rootNode, true)
+	var pageRoutes []string
+	collectPageRoutes(rootNode, &pageRoutes)
+
+	childrenCode := generateChildrenCode(rootNode, true)
 
 	data := TmplData{
-		ModuleName: moduleName,
-		Imports:    imports,
-		Fields:     fields,
-		RenderCode: renderCode,
+		ModuleName:    moduleName,
+		Imports:       imports,
+		Fields:        fields,
+		ChildrenCode:  childrenCode,
+		HasRootLayout: rootNode.HasLayout,
+		PageRoutes:    pageRoutes,
 	}
 
 	tmpl, err := template.New("router").Parse(routerTemplate)
@@ -274,6 +310,7 @@ func writeRouterFile(entryDir string, rootNode *RouteNode, moduleName string) er
 	if err := tmpl.Execute(&buf, data); err != nil {
 		return err
 	}
+
 
 	var gettersBuf strings.Builder
 	generateGetters(rootNode, &gettersBuf)
@@ -322,43 +359,50 @@ func collectFields(node *RouteNode, fields *[]Field) {
 	}
 }
 
-func generateRenderCode(node *RouteNode, isRoot bool) string {
+func collectPageRoutes(node *RouteNode, routes *[]string) {
+	if node.HasPage {
+		*routes = append(*routes, node.Path)
+	}
+	for _, child := range node.Children {
+		collectPageRoutes(child, routes)
+	}
+}
+
+func generateChildrenCode(node *RouteNode, isRoot bool) string {
 	pkg := node.PkgName
 	if isRoot {
-		pkg = "pkg_root" 
+		pkg = "pkg_root"
 	}
 
-	var childrenCode string
-	
-	// If it has a Page, add it to children
 	var items []string
 	if node.HasPage {
 		items = append(items, fmt.Sprintf(`component.C(&router.PageRoute{Path: "%s", Exact: true, Component: r.get_page_%s()})`, node.Path, pkg))
 	}
-	
-	// Add all sub-routes
+
 	for _, child := range node.Children {
 		items = append(items, generateChildCode(child))
 	}
 
 	if len(items) > 0 {
-		childrenCode = "component.Fragment(\n\t\t\t" + strings.Join(items, ",\n\t\t\t") + ",\n\t\t)"
-	} else {
-		childrenCode = "component.Text(\"\")"
+		return "component.Fragment(\n\t\t\t" + strings.Join(items, ",\n\t\t\t") + ",\n\t\t)"
 	}
-
-	if node.HasLayout {
-		return fmt.Sprintf(`component.C(r.get_layout_%s(%s))`, pkg, childrenCode)
-	}
-
-	// If no layout but is root, just return the list
-	return childrenCode
+	return "component.Text(\"\")"
 }
 
 func generateGetters(node *RouteNode, out *strings.Builder) {
 	pkg := node.PkgName
 	if node.PkgName == "app" {
 		pkg = "pkg_root"
+	}
+
+	if node.Path == "/" {
+		out.WriteString("\nfunc (r *AppRouter) get_not_found() component.Renderable {\n\tif r.not_found == nil {\n")
+		if node.HasNotFound {
+			out.WriteString("\t\tr.not_found = &pkg_root.NotFound{}\n")
+		} else {
+			out.WriteString("\t\tr.not_found = &router.DefaultNotFound{}\n")
+		}
+		out.WriteString("\t}\n\treturn r.not_found\n}\n")
 	}
 
 	if node.HasPage {
@@ -388,6 +432,7 @@ func (r *AppRouter) get_layout_%s(children *component.Node) *%s.Layout {
 		generateGetters(child, out)
 	}
 }
+
 func writeClientMain(entryDir, moduleName string) error {
 	content := `//go:build js && wasm
 // Code generated by GoKS. DO NOT EDIT.
@@ -486,9 +531,11 @@ func main() {
 }
 func generateChildCode(child *RouteNode) string {
 	if child.HasLayout {
-		return fmt.Sprintf(`component.C(&router.PageRoute{Path: "%s", Exact: false, Component: %s})`, child.Path, generateRenderCode(child, false))
+		childChildren := generateChildrenCode(child, false)
+		return fmt.Sprintf(`component.C(&router.PageRoute{Path: "%s", Exact: false, Component: r.get_layout_%s(%s)})`, child.Path, child.PkgName, childChildren)
 	}
 	
 	// Leaf node (Page only)
 	return fmt.Sprintf(`component.C(&router.PageRoute{Path: "%s", Exact: true, Component: r.get_page_%s()})`, child.Path, child.PkgName)
 }
+

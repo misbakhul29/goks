@@ -179,7 +179,7 @@ func (s *DevServer) setupRoutes() {
 		return nil
 	})
 
-	// Serve public static files
+	// Serve public static files (both at /public/* and root / Next.js-style)
 	publicDir := filepath.Join(s.cfg.AppDir, "public")
 	s.router.GET("/public/*", func(ctx *router.Context) error {
 		reqPath := ctx.Request().URL.Path
@@ -197,8 +197,16 @@ func (s *DevServer) setupRoutes() {
 		return nil
 	})
 
-	// Catch-all: serve the app shell HTML (SPA mode)
+	// Catch-all: serve static files from public/ or app shell HTML (SPA mode)
 	s.router.GET("/*", func(ctx *router.Context) error {
+		reqPath := ctx.Request().URL.Path
+		if reqPath != "/" && !strings.Contains(reqPath, "..") {
+			staticFile := filepath.Join(publicDir, filepath.Clean(reqPath))
+			if fi, err := os.Stat(staticFile); err == nil && !fi.IsDir() {
+				http.ServeFile(ctx.Response(), ctx.Request(), staticFile)
+				return nil
+			}
+		}
 		return s.serveShell(ctx)
 	})
 	s.router.GET("/", func(ctx *router.Context) error {
@@ -229,7 +237,15 @@ func (s *DevServer) serveShell(ctx *router.Context) error {
 
 		// Temporarily set the path for SSR
 		originalPath := router.CurrentPath.Get()
-		router.CurrentPath.Set(ctx.Request().URL.Path)
+		reqPath := ctx.Request().URL.Path
+		router.CurrentPath.Set(reqPath)
+
+		// Set 404 status code if the route is not matched
+		if matcher, ok := s.cfg.Root.(interface{ HasMatchedPage(string) bool }); ok {
+			if !matcher.HasMatchedPage(reqPath) {
+				ctx.Status(http.StatusNotFound)
+			}
+		}
 
 		// Expand the root component tree
 		renderedNode := component.Expand(component.C(s.cfg.Root), func() {}, nil)
@@ -237,6 +253,7 @@ func (s *DevServer) serveShell(ctx *router.Context) error {
 		// Restore path
 		router.CurrentPath.Set(originalPath)
 		ssrMutex.Unlock()
+
 
 		if renderedNode != nil && renderedNode.Tag == "html" {
 			meta := metadata.ExtractFromTree(component.C(s.cfg.Root))
