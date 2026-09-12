@@ -80,9 +80,10 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	var matched *Route
 	for _, route := range r.routes {
-		if route.method != req.Method {
+		if route.method != req.Method && !(req.Method == "HEAD" && route.method == "GET") {
 			continue
 		}
+
 		if ok, p := matchRoute(route.parts, path); ok {
 			matched = route
 			params = p
