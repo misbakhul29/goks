@@ -35,6 +35,42 @@ func (l *Layout) Render() *component.Node {
 	}
 }
 
+func TestValidateDocument_AttrExpr(t *testing.T) {
+	gox := `package app
+
+import (
+	"github.com/misbakhul29/goks/pkg/component"
+	"github.com/misbakhul29/goks/pkg/font/google"
+)
+
+var (
+	geistSans = google.Geist(google.Options{Variable: "--font-geist-sans"})
+	fontGlitch = google.RubikGlitch(google.Options{Variable: "--font-rubik-glitch"})
+)
+
+type Layout struct {
+	component.ComponentBase
+}
+
+func (l *Layout) Render() *component.Node {
+	return (
+		<html lang="en">
+			<body class={geistSans.Variable() + " " + fontGlitch.Variable() + " antialiased"}>
+				<div id="app">
+					<h1>Hello GoKS</h1>
+				</div>
+			</body>
+		</html>
+	)
+}
+`
+	diags := ValidateDocument("file:///app/layout.gox", gox)
+	if len(diags) > 0 {
+		t.Errorf("expected 0 diagnostics for GOX with attr expr, got %d: %v", len(diags), diags)
+	}
+}
+
+
 func TestValidateDocument_UnclosedTag(t *testing.T) {
 	unclosedGOX := `package app
 

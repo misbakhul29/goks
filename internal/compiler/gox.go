@@ -204,18 +204,33 @@ func extractAttrExprs(xmlStr string) (string, map[string]string) {
 			result.WriteByte('=') // keep the '='
 			i++                  // skip '='
 
-			// Collect balanced {…} expression (handles nesting)
+			// Collect balanced {…} expression (handles nesting and strings)
 			depth := 0
 			start := i
+			var inQuote byte
+			escaped := false
+
 			for i < len(xmlStr) {
 				ch := xmlStr[i]
-				if ch == '{' {
-					depth++
-				} else if ch == '}' {
-					depth--
-					if depth == 0 {
-						i++
-						break
+				if inQuote != 0 {
+					if escaped {
+						escaped = false
+					} else if ch == '\\' && inQuote != '`' {
+						escaped = true
+					} else if ch == inQuote {
+						inQuote = 0
+					}
+				} else {
+					if ch == '"' || ch == '\'' || ch == '`' {
+						inQuote = ch
+					} else if ch == '{' {
+						depth++
+					} else if ch == '}' {
+						depth--
+						if depth == 0 {
+							i++
+							break
+						}
 					}
 				}
 				i++

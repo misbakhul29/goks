@@ -112,18 +112,23 @@ var selfClosingTags = map[string]bool{
 func validateJSXContent(jsx string, baseOffset int, fullContent string) []Diagnostic {
 	var diagnostics []Diagnostic
 
-	// Check for unclosed attribute strings or expressions
-	if diag := checkUnclosedAttributes(jsx, baseOffset, fullContent); diag != nil {
+	// Sanitize ={...} attribute expressions to quoted placeholders of exact same length
+	// so XML decoder and attribute checker do not fail on unquoted attributes or quotes in Go code
+	sanitizedJSX := sanitizeAttrExprs(jsx)
+
+	// Check for unclosed attribute strings
+	if diag := checkUnclosedAttributes(sanitizedJSX, baseOffset, fullContent); diag != nil {
 		diagnostics = append(diagnostics, *diag)
 	}
 
 	// Sanitize naked & so text like "A & B" doesn't fail XML entity parser
-	sanitizedJSX := sanitizeNakedAmpersands(jsx)
+	sanitizedJSX = sanitizeNakedAmpersands(sanitizedJSX)
 
 	// Use XML decoder with strict checking for tag balance
 	d := xml.NewDecoder(strings.NewReader(sanitizedJSX))
 	d.Strict = true
 	d.Entity = xml.HTMLEntity
+
 
 	var tagStack []tagInfo
 	hasParseError := false
@@ -223,7 +228,82 @@ func validateJSXContent(jsx string, baseOffset int, fullContent string) []Diagno
 	return diagnostics
 }
 
+func sanitizeAttrExprs(jsx string) string {
+	var sb strings.Builder
+	sb.Grow(len(jsx))
+
+	i := 0
+	for i < len(jsx) {
+		// Look for = followed by optional whitespace and then {
+		if jsx[i] == '=' {
+			j := i + 1
+			for j < len(jsx) && (jsx[j] == ' ' || jsx[j] == '\t' || jsx[j] == '\n' || jsx[j] == '\r') {
+				j++
+			}
+			if j < len(jsx) && jsx[j] == '{' {
+				// Copy everything up to '{' (e.g. "=" or "= ")
+				sb.WriteString(jsx[i:j])
+
+				// Parse balanced { ... } expression
+				start := j
+				depth := 0
+				k := j
+				var inQuote byte
+				escaped := false
+
+				for k < len(jsx) {
+					ch := jsx[k]
+					if inQuote != 0 {
+						if escaped {
+							escaped = false
+						} else if ch == '\\' && inQuote != '`' {
+							escaped = true
+						} else if ch == inQuote {
+							inQuote = 0
+						}
+					} else {
+						if ch == '"' || ch == '\'' || ch == '`' {
+							inQuote = ch
+						} else if ch == '{' {
+							depth++
+						} else if ch == '}' {
+							depth--
+							if depth == 0 {
+								k++
+								break
+							}
+						}
+					}
+					k++
+				}
+
+				exprLen := k - start
+				if exprLen >= 2 {
+					// Replace `{...}` with `"` + fillers + `"` preserving exact byte length and newlines
+					sb.WriteByte('"')
+					for m := start + 1; m < k-1; m++ {
+						if jsx[m] == '\n' {
+							sb.WriteByte('\n')
+						} else {
+							sb.WriteByte('x')
+						}
+					}
+					sb.WriteByte('"')
+					i = k
+					continue
+				}
+			}
+		}
+
+		sb.WriteByte(jsx[i])
+		i++
+	}
+
+	return sb.String()
+}
+
 func sanitizeNakedAmpersands(jsx string) string {
+
 	var sb strings.Builder
 	sb.Grow(len(jsx))
 
