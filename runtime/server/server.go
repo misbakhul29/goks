@@ -21,6 +21,7 @@ import (
 	"github.com/misbakhul29/goks/internal/livereload"
 	"github.com/misbakhul29/goks/internal/watcher"
 	"github.com/misbakhul29/goks/pkg/component"
+	"github.com/misbakhul29/goks/pkg/font/google"
 	"github.com/misbakhul29/goks/pkg/metadata"
 	"github.com/misbakhul29/goks/pkg/router"
 	"github.com/misbakhul29/goks/pkg/rpc"
@@ -273,7 +274,8 @@ func renderDocumentHTML(htmlNode *component.Node, meta metadata.Metadata, envScr
 
 	// 1. Prepare <head>
 	metaHTML := metadata.RenderHTML(meta)
-	headAssets := `<link rel="stylesheet" href="/app.css" />` + "\n" + envScript + "\n"
+	fontsHTML := google.AllFontsHeadHTML()
+	headAssets := fontsHTML + `<link rel="stylesheet" href="/app.css" />` + "\n" + envScript + "\n"
 
 	if headNode == nil {
 		headNode = &component.Node{
@@ -408,13 +410,14 @@ func (s *DevServer) startWatcher() {
 
 // shellHTML returns the HTML shell that loads and runs the WASM binary.
 func shellHTML(liveReloadScript, envScript, ssrContent string) string {
+	fontsHTML := google.AllFontsHeadHTML()
 	return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>GoKS App</title>
-  <link rel="stylesheet" href="/app.css" />
+  ` + fontsHTML + `<link rel="stylesheet" href="/app.css" />
   ` + envScript + `
   <style>
     #app { min-height: 100vh; }
