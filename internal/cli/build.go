@@ -17,6 +17,8 @@ import (
 
 // BuildCmd returns the `goks build` subcommand.
 func BuildCmd() *cobra.Command {
+	var standalone bool
+
 	cmd := &cobra.Command{
 		Use:   "build",
 		Short: "Build GoKS app for production (server binary + WASM)",
@@ -27,8 +29,12 @@ func BuildCmd() *cobra.Command {
 				return fmt.Errorf("folder 'app/' tidak ditemukan di %s — pastikan kamu berada di dalam folder project GoKS sebelum menjalankan 'goks build'", cwd)
 			}
 
-			fmt.Println(color.CyanString("\n  🔨 GoKS Production Build"))
-			
+			if standalone {
+				fmt.Println(color.CyanString("\n  📦 GoKS Standalone Build"))
+			} else {
+				fmt.Println(color.CyanString("\n  🔨 GoKS Production Build"))
+			}
+
 			// Prepare workspace & transpile .gox files into .goks/workspace
 			if err := compiler.PrepareWorkspace(cwd); err != nil {
 				return err
@@ -54,9 +60,6 @@ func BuildCmd() *cobra.Command {
 			if err := buildCSS(cwd, goksBuildDir); err != nil {
 				return err
 			}
-			if err := buildServer(cwd, goksBuildDir); err != nil {
-				return err
-			}
 
 			// Copy wasm_exec.js into .goks/build for production
 			goRoot := os.Getenv("GOROOT")
@@ -71,16 +74,35 @@ func BuildCmd() *cobra.Command {
 			}
 			copyFile(wasmExec, filepath.Join(goksBuildDir, "wasm_exec.js"))
 
+			if standalone {
+				// Build standalone binary with embedded assets
+				if err := buildStandalone(cwd, goksBuildDir, wasmExec); err != nil {
+					return err
+				}
+			} else {
+				if err := buildServer(cwd, goksBuildDir); err != nil {
+					return err
+				}
+			}
+
 			fmt.Println()
-			fmt.Println(color.GreenString("  ✅ Build complete!"))
-			fmt.Printf("  %s  %s\n", color.HiBlackString("server    →"), filepath.Join(goksBuildDir, "server"))
-			fmt.Printf("  %s  %s\n", color.HiBlackString("wasm      →"), filepath.Join(goksBuildDir, "app.wasm"))
-			fmt.Printf("  %s  %s\n", color.HiBlackString("css       →"), filepath.Join(goksBuildDir, "app.css"))
-			fmt.Printf("\n  Deploy: %s\n", color.CyanString("goks start [port]"))
+			if standalone {
+				fmt.Println(color.GreenString("  ✅ Standalone build complete!"))
+				fmt.Printf("  %s  %s\n", color.HiBlackString("server    →"), filepath.Join(cwd, ".goks", "standalone", "server"))
+				fmt.Printf("\n  Run anywhere: %s\n", color.CyanString(".goks/standalone/server"))
+				fmt.Printf("  With port:    %s\n", color.CyanString("PORT=8080 .goks/standalone/server"))
+			} else {
+				fmt.Println(color.GreenString("  ✅ Build complete!"))
+				fmt.Printf("  %s  %s\n", color.HiBlackString("server    →"), filepath.Join(goksBuildDir, "server"))
+				fmt.Printf("  %s  %s\n", color.HiBlackString("wasm      →"), filepath.Join(goksBuildDir, "app.wasm"))
+				fmt.Printf("  %s  %s\n", color.HiBlackString("css       →"), filepath.Join(goksBuildDir, "app.css"))
+				fmt.Printf("\n  Deploy: %s\n", color.CyanString("goks start [port]"))
+			}
 			return nil
 		},
 	}
 
+	cmd.Flags().BoolVar(&standalone, "standalone", false, "Build a self-contained binary with all assets embedded (like Next.js output: standalone)")
 	return cmd
 }
 
@@ -147,4 +169,93 @@ func buildServer(cwd, outDir string) error {
 	}
 	fmt.Printf(" %s (%v)\n", color.GreenString("done"), time.Since(start).Round(time.Millisecond))
 	return nil
+}
+
+// buildStandalone creates a self-contained server binary with all assets embedded.
+// It copies compiled assets into the entry dir so Go's //go:embed can pick them up,
+// regenerates server_main.go with embed directives, compiles the binary, then
+// cleans up the temporary copies.
+func buildStandalone(cwd, buildDir, wasmExecPath string) error {
+	entryDir := filepath.Join(cwd, ".goks", "entry")
+	standaloneDir := filepath.Join(cwd, ".goks", "standalone")
+
+	if err := os.MkdirAll(standaloneDir, 0755); err != nil {
+		return fmt.Errorf("failed to create standalone dir: %w", err)
+	}
+
+	// ── Step 1: Copy assets into .goks/entry/ so //go:embed works ────────────
+	fmt.Print("  [3/4] Preparing embedded assets...")
+	assetsToCopy := map[string]string{
+		filepath.Join(buildDir, "app.wasm"): filepath.Join(entryDir, "app.wasm"),
+		filepath.Join(buildDir, "app.css"):  filepath.Join(entryDir, "app.css"),
+		wasmExecPath:                        filepath.Join(entryDir, "wasm_exec.js"),
+	}
+	for src, dst := range assetsToCopy {
+		if err := copyFile(src, dst); err != nil {
+			fmt.Printf(" %s\n", color.YellowString("warning: could not copy %s: %v", filepath.Base(src), err))
+		}
+	}
+
+	// Copy public/ directory into entry dir so it can be embedded
+	publicSrc := filepath.Join(cwd, "public")
+	publicDst := filepath.Join(entryDir, "public")
+	hasPublic := false
+	if _, err := os.Stat(publicSrc); err == nil {
+		hasPublic = true
+		if err := copyDir(publicSrc, publicDst); err != nil {
+			fmt.Printf(" %s\n", color.YellowString("warning: could not copy public/: %v", err))
+			hasPublic = false
+		}
+	}
+	_ = hasPublic
+	fmt.Printf(" %s\n", color.GreenString("done"))
+
+	// ── Step 2: Regenerate server_main.go with //go:embed directives ─────────
+	fmt.Print("  [4/4] Building standalone binary...")
+	start := time.Now()
+
+	if err := generator.GenerateStandaloneRouter(cwd); err != nil {
+		return fmt.Errorf("failed to generate standalone router: %w", err)
+	}
+
+	// Ensure entry module is up to date
+	tidyCmd := exec.Command("go", "mod", "tidy")
+	tidyCmd.Dir = entryDir
+	_ = tidyCmd.Run()
+
+	// Build the standalone server binary
+	cmd := exec.Command("go", "build", "-o", filepath.Join(standaloneDir, "server"), ".")
+	cmd.Dir = entryDir
+	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	buildErr := cmd.Run()
+
+	// ── Cleanup: remove temporary asset copies from entry dir ─────────────────
+	for _, dst := range assetsToCopy {
+		os.Remove(dst)
+	}
+	os.RemoveAll(publicDst)
+
+	if buildErr != nil {
+		return fmt.Errorf("standalone build failed: %w", buildErr)
+	}
+	fmt.Printf(" %s (%v)\n", color.GreenString("done"), time.Since(start).Round(time.Millisecond))
+	return nil
+}
+
+// copyDir recursively copies a directory tree from src to dst.
+func copyDir(src, dst string) error {
+	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if info.IsDir() {
+			return os.MkdirAll(target, info.Mode())
+		}
+		return copyFile(path, target)
+	})
 }

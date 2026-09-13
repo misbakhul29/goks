@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"log"
 	"mime"
 	"net/http"
@@ -43,8 +44,13 @@ type Config struct {
 	Port        int                     // default 3000
 	AppDir      string                  // path to user's app directory
 	DevMode     bool                    // enable hot reload and live reload
+	Standalone  bool                    // if true, serve assets from embedded FS (standalone build)
 	Root        component.Renderable    // Root component for Server-Side Rendering (SSR)
 	Middlewares []router.MiddlewareFunc // User-defined global middlewares
+
+	// Standalone mode: embedded filesystems (set by generated server_main.go)
+	EmbeddedAssets fs.ReadFileFS // embeds app.wasm, app.css, wasm_exec.js
+	EmbeddedPublic fs.FS        // embeds public/ directory
 }
 
 // DevServer is the GoKS development server with hot reload.
@@ -130,6 +136,97 @@ func (s *DevServer) setupRoutes() {
 		return nil
 	})
 
+	if s.cfg.Standalone && s.cfg.EmbeddedAssets != nil {
+		// ── STANDALONE MODE: serve all assets from embedded FS ──────────────────
+		s.setupStandaloneRoutes()
+	} else {
+		// ── NORMAL MODE: serve assets from disk ─────────────────────────────────
+		s.setupDiskRoutes()
+	}
+}
+
+// setupStandaloneRoutes wires routes that serve assets from embedded FS.
+func (s *DevServer) setupStandaloneRoutes() {
+	// Serve compiled WASM binary from embed
+	s.router.GET("/app.wasm", func(ctx *router.Context) error {
+		data, err := s.cfg.EmbeddedAssets.ReadFile("app.wasm")
+		if err != nil {
+			ctx.Response().WriteHeader(http.StatusNotFound)
+			return nil
+		}
+		ctx.Response().Header().Set("Content-Type", "application/wasm")
+		ctx.Response().Write(data)
+		return nil
+	})
+
+	// Serve compiled CSS from embed
+	s.router.GET("/app.css", func(ctx *router.Context) error {
+		data, err := s.cfg.EmbeddedAssets.ReadFile("app.css")
+		if err != nil {
+			ctx.Response().WriteHeader(http.StatusNotFound)
+			return nil
+		}
+		ctx.Response().Header().Set("Content-Type", "text/css; charset=utf-8")
+		ctx.Response().Write(data)
+		return nil
+	})
+
+	// Serve wasm_exec.js from embed
+	s.router.GET("/wasm_exec.js", func(ctx *router.Context) error {
+		data, err := s.cfg.EmbeddedAssets.ReadFile("wasm_exec.js")
+		if err != nil {
+			ctx.Response().WriteHeader(http.StatusNotFound)
+			return nil
+		}
+		ctx.Response().Header().Set("Content-Type", "application/javascript")
+		ctx.Response().Write(data)
+		return nil
+	})
+
+	// Serve public static files from embedded FS
+	var publicFS http.FileSystem
+	if s.cfg.EmbeddedPublic != nil {
+		subFS, err := fs.Sub(s.cfg.EmbeddedPublic, "public")
+		if err == nil {
+			publicFS = http.FS(subFS)
+		}
+	}
+
+	s.router.GET("/public/*", func(ctx *router.Context) error {
+		if publicFS == nil {
+			ctx.Response().WriteHeader(http.StatusNotFound)
+			return nil
+		}
+		http.StripPrefix("/public/", http.FileServer(publicFS)).ServeHTTP(
+			ctx.Response(), ctx.Request(),
+		)
+		return nil
+	})
+
+	// Catch-all: serve static files from embedded public/ or app shell HTML
+	s.router.GET("/*", func(ctx *router.Context) error {
+		reqPath := ctx.Request().URL.Path
+		if reqPath != "/" && !strings.Contains(reqPath, "..") && publicFS != nil {
+			// Try to open as static file from embedded public/
+			f, err := publicFS.Open(reqPath)
+			if err == nil {
+				stat, statErr := f.Stat()
+				f.Close()
+				if statErr == nil && !stat.IsDir() {
+					http.FileServer(publicFS).ServeHTTP(ctx.Response(), ctx.Request())
+					return nil
+				}
+			}
+		}
+		return s.serveShell(ctx)
+	})
+	s.router.GET("/", func(ctx *router.Context) error {
+		return s.serveShell(ctx)
+	})
+}
+
+// setupDiskRoutes wires routes that serve assets from disk (normal/dev mode).
+func (s *DevServer) setupDiskRoutes() {
 	// Serve compiled WASM binary
 	s.router.GET("/app.wasm", func(ctx *router.Context) error {
 		wasmPath := filepath.Join(s.cfg.AppDir, ".goks", "build", "app.wasm")
