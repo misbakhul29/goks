@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"fmt"
 	"reflect"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -98,8 +99,15 @@ func (b *Builder[T]) Where(condition string, args ...any) *Builder[T] {
 	return b
 }
 
+// validOrderBy matches safe ORDER BY expressions like "name", "created_at DESC", "u.email ASC".
+var validOrderBy = regexp.MustCompile(`^[a-zA-Z0-9_.]+(?:\s+(?:ASC|DESC))?(?:\s*,\s*[a-zA-Z0-9_.]+(?:\s+(?:ASC|DESC))?)*$`)
+
 // OrderBy sets the ORDER BY clause.
+// Panics if the value contains unsafe characters to prevent SQL injection.
 func (b *Builder[T]) OrderBy(col string) *Builder[T] {
+	if !validOrderBy.MatchString(col) {
+		panic("goks/orm: unsafe OrderBy value: " + col)
+	}
 	b.orderBy = col
 	return b
 }
@@ -204,21 +212,16 @@ func scanRows[T any](rows *sql.Rows) ([]T, error) {
 }
 
 // fieldPointers returns scan destination pointers for struct fields matching cols.
+// It recursively scans anonymous embedded structs (e.g. orm.Model).
 func fieldPointers(v any, cols []string) []any {
 	rv := reflect.ValueOf(v).Elem()
-	rt := rv.Type()
-	tagIndex := make(map[string]int)
-	for i := 0; i < rt.NumField(); i++ {
-		tag := rt.Field(i).Tag.Get("db")
-		if tag == "" {
-			tag = strings.ToLower(rt.Field(i).Name)
-		}
-		tagIndex[tag] = i
-	}
+	tagMap := make(map[string]reflect.Value)
+	collectFieldPointers(rv, tagMap)
+
 	ptrs := make([]any, len(cols))
 	for i, col := range cols {
-		if idx, ok := tagIndex[col]; ok {
-			ptrs[i] = rv.Field(idx).Addr().Interface()
+		if fv, ok := tagMap[col]; ok && fv.CanAddr() {
+			ptrs[i] = fv.Addr().Interface()
 		} else {
 			// discard unknown column
 			var discard any
@@ -228,6 +231,23 @@ func fieldPointers(v any, cols []string) []any {
 	return ptrs
 }
 
+func collectFieldPointers(rv reflect.Value, tagMap map[string]reflect.Value) {
+	rt := rv.Type()
+	for i := 0; i < rt.NumField(); i++ {
+		field := rt.Field(i)
+		fv := rv.Field(i)
+		if field.Anonymous && fv.Kind() == reflect.Struct {
+			collectFieldPointers(fv, tagMap)
+			continue
+		}
+		tag := field.Tag.Get("db")
+		if tag == "" {
+			tag = strings.ToLower(field.Name)
+		}
+		tagMap[tag] = fv
+	}
+}
+
 // -----------------------------------------------------------------------
 // Dialect
 // -----------------------------------------------------------------------
@@ -235,13 +255,17 @@ func fieldPointers(v any, cols []string) []any {
 // Dialect abstracts SQL differences between databases.
 type Dialect interface {
 	Placeholder(n int) string // e.g. $1 (postgres) or ? (mysql/sqlite)
+	SupportsReturning() bool  // true for Postgres, false for MySQL/SQLite
 }
 
 type postgresDialect struct{}
 type mysqlDialect struct{}
 
 func (postgresDialect) Placeholder(n int) string { return fmt.Sprintf("$%d", n) }
+func (postgresDialect) SupportsReturning() bool  { return true }
+
 func (mysqlDialect) Placeholder(_ int) string    { return "?" }
+func (mysqlDialect) SupportsReturning() bool     { return false }
 
 func dialectFor(driver string) Dialect {
 	switch driver {

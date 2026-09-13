@@ -2,6 +2,7 @@ package component
 
 import (
 	"fmt"
+	"html"
 	"strings"
 )
 
@@ -14,8 +15,8 @@ func RenderToString(node *Node) string {
 
 	switch node.Type {
 	case NodeTypeText:
-		// HTML escape should ideally be applied here
-		return node.Text
+		// Escape HTML special characters to prevent XSS.
+		return html.EscapeString(node.Text)
 	case NodeTypeFragment:
 		var sb strings.Builder
 		for _, child := range node.Children {
@@ -39,7 +40,9 @@ func RenderToString(node *Node) string {
 			if k == "className" {
 				k = "class"
 			}
-			sb.WriteString(fmt.Sprintf(" %s=\"%v\"", k, v))
+			// Escape attribute values to prevent XSS injection.
+			escapedVal := html.EscapeString(fmt.Sprintf("%v", v))
+			sb.WriteString(fmt.Sprintf(" %s=\"%s\"", k, escapedVal))
 		}
 		sb.WriteString(">")
 

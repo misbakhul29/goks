@@ -69,17 +69,34 @@ func Create[T any](db *Database, m *T) error {
 	}
 
 	table := tableNameOf(m)
-	query := fmt.Sprintf(
-		"INSERT INTO %s (%s) VALUES (%s) RETURNING id",
-		table,
-		strings.Join(cols, ", "),
-		strings.Join(placeholders, ", "),
-	)
-
 	var id uint
-	err := db.db.QueryRow(query, vals...).Scan(&id)
-	if err != nil {
-		return fmt.Errorf("goks/orm: Create: %w", err)
+
+	if db.dialect != nil && db.dialect.SupportsReturning() {
+		query := fmt.Sprintf(
+			"INSERT INTO %s (%s) VALUES (%s) RETURNING id",
+			table,
+			strings.Join(cols, ", "),
+			strings.Join(placeholders, ", "),
+		)
+		err := db.db.QueryRow(query, vals...).Scan(&id)
+		if err != nil {
+			return fmt.Errorf("goks/orm: Create: %w", err)
+		}
+	} else {
+		query := fmt.Sprintf(
+			"INSERT INTO %s (%s) VALUES (%s)",
+			table,
+			strings.Join(cols, ", "),
+			strings.Join(placeholders, ", "),
+		)
+		res, err := db.db.Exec(query, vals...)
+		if err != nil {
+			return fmt.Errorf("goks/orm: Create: %w", err)
+		}
+		lastID, err := res.LastInsertId()
+		if err == nil && lastID > 0 {
+			id = uint(lastID)
+		}
 	}
 
 	// Set the ID back on the model

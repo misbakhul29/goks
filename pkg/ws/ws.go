@@ -6,6 +6,7 @@ package ws
 import (
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/gorilla/websocket"
@@ -16,15 +17,27 @@ import (
 // -----------------------------------------------------------------------
 
 var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool { return true },
+	// Only allow same-origin WebSocket connections to prevent
+	// Cross-Site WebSocket Hijacking (CSWSH) attacks.
+	CheckOrigin: func(r *http.Request) bool {
+		origin := r.Header.Get("Origin")
+		// No Origin header = same-origin (curl, native clients, etc.)
+		if origin == "" {
+			return true
+		}
+		host := r.Host
+		// Allow if origin contains the host (handles http:// and https://)
+		return strings.Contains(origin, host)
+	},
 }
 
 // Client represents a connected WebSocket client.
 type Client struct {
-	conn *websocket.Conn
-	send chan []byte
-	hub  *Hub
-	ID   string
+	conn     *websocket.Conn
+	send     chan []byte
+	hub      *Hub
+	ID       string
+	closeOnce sync.Once // ensures send channel is closed exactly once
 }
 
 // Hub manages connected WebSocket clients and message broadcasting.
@@ -47,14 +60,17 @@ func (h *Hub) OnMessage(fn func(client *Client, msg []byte)) {
 }
 
 // Broadcast sends a message to all connected clients.
+// Clients with a full send buffer are disconnected.
 func (h *Hub) Broadcast(msg []byte) {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
+	// Use full Lock (not RLock) because we may delete from the map.
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	for client := range h.clients {
 		select {
 		case client.send <- msg:
 		default:
-			close(client.send)
+			// Buffer full — disconnect this client.
+			client.closeOnce.Do(func() { close(client.send) })
 			delete(h.clients, client)
 		}
 	}

@@ -48,7 +48,7 @@ func New(ttl time.Duration) *Manager {
 }
 
 // Login creates a new session for the given user and sets a cookie.
-func (m *Manager) Login(w http.ResponseWriter, user *User) (*Session, error) {
+func (m *Manager) Login(w http.ResponseWriter, r *http.Request, user *User) (*Session, error) {
 	token, err := generateToken()
 	if err != nil {
 		return nil, err
@@ -64,12 +64,16 @@ func (m *Manager) Login(w http.ResponseWriter, user *User) (*Session, error) {
 	m.sessions[token] = sess
 	m.mu.Unlock()
 
+	// Set Secure flag if the request is over HTTPS (direct TLS or behind a reverse proxy).
+	secure := r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
+
 	http.SetCookie(w, &http.Cookie{
 		Name:     "goks_session",
 		Value:    token,
 		Path:     "/",
 		Expires:  sess.ExpiresAt,
 		HttpOnly: true,
+		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 	})
 
@@ -125,11 +129,11 @@ func Required() router.MiddlewareFunc {
 			if !ok {
 				return ctx.Redirect("/login", http.StatusFound)
 			}
-			// Store user in request context
+			// Store user in request context using SetRequest (safe, no pointer deref).
 			req := ctx.Request().WithContext(
 				context.WithValue(ctx.Request().Context(), sessionKey, sess),
 			)
-			*ctx.Request() = *req
+			ctx.SetRequest(req)
 			return next(ctx)
 		}
 	}

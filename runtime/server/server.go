@@ -299,9 +299,11 @@ func (s *DevServer) setupDiskRoutes() {
 		reqPath := ctx.Request().URL.Path
 		if reqPath != "/" && !strings.Contains(reqPath, "..") {
 			staticFile := filepath.Join(publicDir, filepath.Clean(reqPath))
-			if fi, err := os.Stat(staticFile); err == nil && !fi.IsDir() {
-				http.ServeFile(ctx.Response(), ctx.Request(), staticFile)
-				return nil
+			if rel, err := filepath.Rel(publicDir, staticFile); err == nil && !strings.HasPrefix(rel, "..") {
+				if fi, err := os.Stat(staticFile); err == nil && !fi.IsDir() {
+					http.ServeFile(ctx.Response(), ctx.Request(), staticFile)
+					return nil
+				}
 			}
 		}
 		return s.serveShell(ctx)

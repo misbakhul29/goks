@@ -1,8 +1,10 @@
 package router
 
 import (
+	"bytes"
 	"context"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -29,31 +31,94 @@ func Timeout(d time.Duration) MiddlewareFunc {
 		return func(ctx *Context) error {
 			reqCtx, cancel := context.WithTimeout(ctx.Request().Context(), d)
 			defer cancel()
-			
-			// Replace the request with the new context
+
+			origW := ctx.Response()
+			tw := &timeoutWriter{ResponseWriter: origW, code: http.StatusOK}
+			ctx.w = tw
+
 			req := ctx.Request().WithContext(reqCtx)
-			ctx.r = req
-			
-			// Use a channel to run the handler and check for timeout
-			done := make(chan error, 1)
+			ctx.SetRequest(req)
+
+			type result struct {
+				err   error
+				panic any
+			}
+			done := make(chan result, 1)
+
 			go func() {
 				defer func() {
 					if r := recover(); r != nil {
-						// Pass panic up to the Recover middleware if any
-						panic(r)
+						done <- result{panic: r}
 					}
 				}()
-				done <- next(ctx)
+				err := next(ctx)
+				done <- result{err: err}
 			}()
-			
+
 			select {
 			case <-reqCtx.Done():
-				// Context timeout exceeded
+				tw.markTimeout()
+				ctx.w = origW
 				ctx.Status(http.StatusGatewayTimeout).Text("Gateway Timeout")
 				return nil
-			case err := <-done:
-				return err
+			case res := <-done:
+				if res.panic != nil {
+					panic(res.panic)
+				}
+				ctx.w = origW
+				tw.flush(origW)
+				return res.err
 			}
 		}
 	}
+}
+
+type timeoutWriter struct {
+	http.ResponseWriter
+	mu          sync.Mutex
+	buf         bytes.Buffer
+	code        int
+	wroteHeader bool
+	timedOut    bool
+}
+
+func (tw *timeoutWriter) Header() http.Header {
+	return tw.ResponseWriter.Header()
+}
+
+func (tw *timeoutWriter) WriteHeader(code int) {
+	tw.mu.Lock()
+	defer tw.mu.Unlock()
+	if tw.timedOut || tw.wroteHeader {
+		return
+	}
+	tw.code = code
+	tw.wroteHeader = true
+}
+
+func (tw *timeoutWriter) Write(b []byte) (int, error) {
+	tw.mu.Lock()
+	defer tw.mu.Unlock()
+	if tw.timedOut {
+		return len(b), nil
+	}
+	return tw.buf.Write(b)
+}
+
+func (tw *timeoutWriter) flush(w http.ResponseWriter) {
+	tw.mu.Lock()
+	defer tw.mu.Unlock()
+	if tw.timedOut {
+		return
+	}
+	if tw.wroteHeader && tw.code > 0 {
+		w.WriteHeader(tw.code)
+	}
+	_, _ = w.Write(tw.buf.Bytes())
+}
+
+func (tw *timeoutWriter) markTimeout() {
+	tw.mu.Lock()
+	defer tw.mu.Unlock()
+	tw.timedOut = true
 }

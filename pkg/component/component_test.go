@@ -1,6 +1,7 @@
 package component_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/misbakhul29/goks/pkg/component"
@@ -164,6 +165,21 @@ func TestAny(t *testing.T) {
 
 	if component.Any(nil) != nil {
 		t.Fatalf("expected Any(nil) to return nil")
+	}
+}
+
+func TestRenderToString_EscapesTextAndAttrs(t *testing.T) {
+	node := component.H("a", component.Props{
+		"href":  "javascript:alert(\"xss\")",
+		"title": "<script>alert(1)</script>",
+	}, component.Text("<img src=x onerror=alert(1)>"))
+
+	out := component.RenderToString(node)
+	if strings.Contains(out, "<script>") || strings.Contains(out, "<img src=x") {
+		t.Fatalf("un-escaped HTML tags found in SSR output: %s", out)
+	}
+	if !strings.Contains(out, "&lt;img") || !strings.Contains(out, "&lt;script&gt;") {
+		t.Fatalf("expected HTML entities in SSR output, got: %s", out)
 	}
 }
 

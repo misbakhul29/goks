@@ -5,26 +5,52 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"strings"
+	"sync"
 )
 
-var registry = make(map[string]any)
+var (
+	registryMu sync.RWMutex
+	registry   = make(map[string]any)
+)
 
 // Register exposes a Go function to be called from the WASM client.
 // The function must take exactly one argument and return (result, error).
 func Register(name string, fn any) {
+	registryMu.Lock()
+	defer registryMu.Unlock()
 	registry[name] = fn
 }
 
 // Handler returns an HTTP handler that processes RPC requests.
 func Handler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				http.Error(w, "internal RPC error", http.StatusInternalServerError)
+			}
+		}()
+
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 
+		// Prevent Cross-Site Request Forgery (CSRF) by requiring same-origin
+		origin := r.Header.Get("Origin")
+		if origin != "" && !strings.Contains(origin, r.Host) {
+			http.Error(w, "cross-origin RPC not allowed", http.StatusForbidden)
+			return
+		}
+
+		// Limit RPC payload to 1MB to prevent memory exhaustion DoS
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+
 		name := r.URL.Query().Get("method")
+		registryMu.RLock()
 		fn, ok := registry[name]
+		registryMu.RUnlock()
+
 		if !ok {
 			http.Error(w, fmt.Sprintf("rpc method not found: %s", name), http.StatusNotFound)
 			return

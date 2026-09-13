@@ -42,9 +42,12 @@ type JWT struct {
 }
 
 // NewJWT creates a new JWT manager.
-// secret: signing key (keep this secret!)
+// secret: signing key — must be at least 32 characters (panics otherwise).
 // ttl: token lifetime (e.g., 24*time.Hour)
 func NewJWT(secret string, ttl time.Duration) *JWT {
+	if len(secret) < 32 {
+		panic("goks/auth: JWT secret must be at least 32 characters long")
+	}
 	return &JWT{secret: []byte(secret), ttl: ttl}
 }
 
