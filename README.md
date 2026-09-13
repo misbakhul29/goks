@@ -1,32 +1,59 @@
 # GoKS (Go Kickstart)
 
-GoKS is a modern, full-stack Go web framework designed for building full-stack web applications entirely in Go—from server-side routing and APIs to client-side interactive UI via WebAssembly. **No JavaScript or Node.js required.**
+<div align="center">
 
-It embraces a "batteries-included" philosophy, combining a React/Next.js-like developer experience with the performance, type safety, and simplicity of Go: **GOX (JSX-like syntax in Go)**, **Tailwind CSS v4**, file-system routing, built-in ORM, auth, WebSockets, and hot-reloading CLI.
+[![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?style=for-the-badge&logo=go&logoColor=white)](https://golang.org)
+[![Release](https://img.shields.io/badge/release-v0.8.0-6366F1?style=for-the-badge&logo=github)](https://github.com/misbakhul29/goks/releases)
+[![License](https://img.shields.io/badge/license-MIT-10B981?style=for-the-badge)](LICENSE)
+[![WASM](https://img.shields.io/badge/WebAssembly-Enabled-654FF0?style=for-the-badge&logo=webassembly&logoColor=white)](https://webassembly.org)
+[![Tailwind](https://img.shields.io/badge/Tailwind_CSS-v4-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
+
+**The Modern Fullstack Go Web Framework.**  
+*Backend APIs + WebAssembly Frontend, 100% Type-Safe Go. Zero Node.js or JavaScript Required.*
+
+[Getting Started](#-quick-start) • [Features](#-features) • [Why GoKS?](#-why-goks) • [UI Components](#-goks-ui-component-system) • [Server Actions](#-progressive-server-actions-pkgaction) • [Deployment](#-deployment-guide)
+
+</div>
+
+---
+
+## ⚡ Why GoKS?
+
+GoKS bridges the gap between modern React/Next.js developer ergonomics and the legendary performance, type-safety, and single-binary deployment of Go.
+
+| Feature | GoKS | Next.js / Remix | templ + HTMX | Fiber / Gin |
+| :--- | :---: | :---: | :---: | :---: |
+| **Language Stack** | **100% Go** (Fullstack) | TypeScript / JS | Go + HTML Attributes | Go (Backend Only) |
+| **Frontend Runtime** | **WebAssembly (Go)** | JS Virtual DOM | Browser Native / DOM swap | None / Raw Templates |
+| **Node.js / npm Required?** | **❌ No (Zero npm)** | ✅ Required | ❌ No | ❌ No |
+| **Server Actions** | **✅ Built-in (`pkg/action`)** | ✅ Yes | ⚠️ Partial (HTMX triggers) | ❌ Manual endpoints |
+| **Selective Hydration** | **✅ Islands (0-WASM static)** | ⚠️ Partial (React RSC) | ❌ N/A | ❌ N/A |
+| **Component Generator** | **✅ `goks ui` (shadcn-style)** | ✅ `shadcn/ui` | ❌ None | ❌ None |
+| **Tailwind CSS v4** | **✅ Built-in standalone** | ⚠️ Needs Node.js/npm | ⚠️ External CLI setup | ⚠️ External setup |
+| **Production Artifact** | **Single Standalone Binary** | Node runtime + node_modules | Single Binary | Single Binary |
 
 ---
 
 ## ✨ Features
 
-- **🚀 GOX Syntax (`.gox`):** Write declarative, JSX-like markup directly in Go (`<div><h1>...</h1></div>`, `<c.Button />`, `{variable}`). Transpiled automatically into clean Go code in an isolated workspace.
-- **⚡ Tailwind CSS v4 Built-in:** Zero-config Tailwind CSS v4 powered by the standalone Rust compiler. No Node.js or npm dependencies required—GoKS downloads and manages the CLI automatically.
-- **🎨 `goks ui` Component System:** A `shadcn/ui`-inspired CLI generator that adds production-ready, fully styled Tailwind `.gox` components (`button`, `input`, `card`, `dialog`, `badge`, `dropdown`, `table`) right into your project.
-- **⚡ TinyGo WASM Support:** Optional `--compiler=tinygo` build mode yielding ultra-compact client WebAssembly bundles (<300 KB) with instant boot times.
-- **🏝️ Islands Architecture & Selective Hydration:** Static pages render 100% pure HTML with 0-WASM overhead. WebAssembly hydration is selectively loaded only for interactive client islands (`component.ClientBase` or event handlers).
-- **🔄 Progressive Server Actions (`pkg/action`):** Next.js-style server functions with dual-mode execution—submits seamlessly via async WASM `fetch()`, with automatic zero-JS HTML form fallback and CSRF protection.
-- **🗄️ Built-in ORM with SQLite:** Fluent, type-safe query builder (`orm.Query[T]().Where(...)`), auto-timestamps, soft-deletes, migrations, and zero-config local database with `orm.OpenSQLite("app.db")`.
-- **🪝 React-like Hooks:** Functional component state management with `component.UseState()` and dynamic node wrapping with `component.Any()`.
+- **🚀 GOX Syntax (`.gox`):** Declarative, JSX-like markup directly inside Go (`<div><h1>{title}</h1></div>`, `<ui.Button />`). Compiled directly into Go code in an isolated workspace.
+- **🎨 `goks ui` Component System:** Built-in CLI generator inspired by `shadcn/ui`. Add accessible, styled Tailwind components (`button`, `input`, `card`, `dialog`, `badge`, `dropdown`, `table`) right into `components/ui/`.
+- **🏝️ Islands Architecture & Selective Hydration:** Static pages render **100% pure HTML with 0 KB WASM**. WebAssembly hydration is selectively loaded only for pages with client interactivity (`component.ClientBase` or event handlers).
+- **⚡ TinyGo WASM Support (`--compiler=tinygo`):** Compile client WebAssembly bundles down to **< 300 KB** for blazing-fast mobile and edge load times.
+- **🔄 Progressive Server Actions (`pkg/action`):** Next.js-style server functions with dual-mode execution: async `fetch()` via WASM in modern browsers, with automatic zero-JS HTML form fallback and built-in CSRF protection.
+- **⚡ Tailwind CSS v4 Built-in:** Zero-config Tailwind CSS v4 powered by the standalone Rust compiler. No Node.js or npm dependencies required—GoKS manages everything automatically.
+- **🗄️ Built-in ORM & SQLite:** Fluent, type-safe query builder (`orm.Query[T]().Where(...)`), auto-timestamps, soft-deletes, migrations, and instant zero-config local development with `orm.OpenSQLite("app.db")`.
+- **🪝 React-like Hooks:** Functional component state management with `component.UseState()` and dynamic child wrapping with `component.Any()`.
 - **🛠️ Powerful CLI Tooling:**
-  - `goks new` — Scaffold full-stack applications with an opinionated structure.
-  - `goks dev` — Instant hot-reload server with WASM compilation, Tailwind watcher, and browser compile-error overlay.
-  - `goks page` & `goks generate` — Scaffold pages, reusable components, and ORM models.
-  - `goks ui add` — Add accessible, styled components into `components/ui/`.
-  - `goks build` & `goks start` — Optimized production builds and server launcher.
-  - `goks build --standalone` — Bundle everything (WASM, CSS, assets) into a **single self-contained binary**. No project source needed at runtime.
-- **📁 File-System Routing:** Next.js App Router style routing inside the `app/` directory (`page.gox`, `layout.gox`).
-- **🔒 Authentication & RBAC:** Zero-dependency JWT, session management, and Role-Based Access Control middleware.
-- **🔌 WebSockets:** Hub pattern, typed event routing (`hub.On("event")`), and room management.
-- **📦 Global State Store:** Reactive global store (`store.New()`) for WASM client state synchronization.
+  - `goks new` — Scaffold full-stack apps with opinionated structure.
+  - `goks dev` — Hot-reloading dev server with WASM compilation, Tailwind watcher, and browser compile-error overlay.
+  - `goks ui add` — Add styled components into `components/ui/`.
+  - `goks page` & `goks generate` — Scaffold routes, reusable components, and ORM models.
+  - `goks build --standalone` — Produce a **single self-contained binary** embedding all assets (WASM, CSS, HTML).
+- **📁 File-System Routing:** Next.js App Router style file-based routing inside `app/` (`page.gox`, `layout.gox`).
+- **🔒 Authentication & RBAC:** Zero-dependency JWT tokens, session management, and Role-Based Access Control middleware.
+- **🔌 Realtime WebSockets:** WebSocket hub, typed event routing (`hub.On("chat", handler)`), and room broadcasting.
+- **📦 Reactive Global Store:** `store.New()` for cross-component reactive state synchronization in client WASM.
 - **🛡️ Production Middleware Stack:** Built-in `Logger`, `CORS`, `Secure`, `RequestID`, `Compress`, `MaxBytes`, and `Timeout`.
 
 ---
@@ -52,52 +79,47 @@ cd myapp
 go mod tidy
 ```
 
-### 2. Start the development server
+### 2. Start development server
 ```bash
 goks dev
 ```
-
-Your app will be running at `http://localhost:3000` with live reloading.
+Your app is live at `http://localhost:3000` with instant hot-reloading!
 - Tailwind CSS v4 compiles automatically in the background.
-- If you have a compilation error, GoKS displays an in-browser error overlay and recovers as soon as you save the fix.
+- If code fails to compile, GoKS displays an in-browser error overlay and auto-recovers on file save.
 
-### 3. Generate pages and components
+### 3. Add UI components (`goks ui`)
 ```bash
-# Generate a new page (app/about/page.gox)
-goks page about
-# or
-goks generate page blog/detail
+# Add essential components
+goks ui add button input card dialog
 
-# Generate a reusable component (app/components/card.gox)
-goks generate component Card
-
-# Generate a database model (models/post.go)
-goks generate model Post
+# Or install all available components:
+goks ui add all
 ```
 
 ### 4. Build for production
 
-**Standard build** — outputs server binary + assets:
+**Standard build:**
 ```bash
 goks build
 goks start 3000
 ```
 
-**Standalone build** — one binary, run anywhere (like Next.js `output: 'standalone'`):
+**Single-binary Standalone build (Run anywhere, no source needed):**
 ```bash
 goks build --standalone
-# Output: .goks/standalone/server
-
-# Run it anywhere:
 ./.goks/standalone/server
-PORT=8080 ./.goks/standalone/server
+```
+
+**Ultra-compact WASM build (< 300 KB with TinyGo):**
+```bash
+goks build --compiler=tinygo --standalone
 ```
 
 ---
 
-## 💻 GOX (`.gox`) Syntax
+## 💻 GOX (`.gox`) Syntax Guide
 
-GoKS introduces `.gox` files, allowing you to write HTML/JSX-like tags directly inside Go functions and methods while maintaining 100% type safety.
+GOX allows you to write HTML/JSX-like markup directly in Go while retaining strict compile-time type safety.
 
 ### Example: Page Component (`app/page.gox`)
 
@@ -106,7 +128,7 @@ package app
 
 import (
 	"github.com/misbakhul29/goks/pkg/component"
-	c "myapp/app/components"
+	"myapp/components/ui"
 )
 
 type Page struct {
@@ -118,34 +140,43 @@ func (p *Page) Render() *component.Node {
 
 	return (
 		<main class="min-h-screen bg-slate-50 dark:bg-slate-900 p-8">
-			<div class="max-w-4xl mx-auto">
-				<h1 class="text-4xl font-bold text-slate-900 dark:text-white mb-4">
+			<div class="max-w-4xl mx-auto space-y-6">
+				<h1 class="text-4xl font-bold text-slate-900 dark:text-white">
 					{title}
 				</h1>
-				<p class="text-slate-600 dark:text-slate-400 mb-6">
-					Fullstack web application running purely on Go and WebAssembly.
+				<p class="text-slate-600 dark:text-slate-400">
+					Fullstack web application powered purely by Go and WebAssembly.
 				</p>
-				<c.Button Label="Get Started" Variant="primary" />
+				<ui.Card>
+					<ui.CardHeader>
+						<ui.CardTitle>Quick Actions</ui.CardTitle>
+						<ui.CardDescription>Get started right away</ui.CardDescription>
+					</ui.CardHeader>
+					<ui.CardContent>
+						<ui.Button variant="primary">Get Started</ui.Button>
+					</ui.CardContent>
+				</ui.Card>
 			</div>
 		</main>
 	)
 }
 ```
 
-### Example: State & Hooks (`app/components/counter.gox`)
+### Example: Client Interactive Island & State (`app/components/counter.gox`)
 
-GoKS supports React-like hooks such as `UseState`:
+To mark a component as an interactive client island that hydrates WebAssembly, embed `component.ClientBase` or use event handlers:
 
 ```go
 package components
 
 import (
-	"fmt"
 	"github.com/misbakhul29/goks/pkg/component"
+	"myapp/components/ui"
 )
 
 type Counter struct {
 	component.ComponentBase
+	component.ClientBase // Designates this component as an interactive WASM island
 	Initial int
 }
 
@@ -153,19 +184,19 @@ func (c *Counter) Render() *component.Node {
 	count, setCount := component.UseState(c.Initial)
 
 	return (
-		<div class="flex items-center gap-4 p-4 border rounded-xl">
+		<div class="flex items-center gap-4 p-4 border rounded-xl bg-white shadow-sm">
 			<span class="text-xl font-semibold">Count: {count}</span>
-			<button 
-				class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+			<ui.Button 
+				variant="primary"
 				onClick={func() { setCount(count + 1) }}>
 				Increment
-			</button>
+			</ui.Button>
 		</div>
 	)
 }
 ```
 
-> **VS Code Tip:** Add the following to your `.vscode/settings.json` to get syntax highlighting for `.gox` files:
+> **VS Code Tip:** Add this to `.vscode/settings.json` for syntax highlighting:
 > ```json
 > {
 >   "files.associations": {
@@ -176,212 +207,133 @@ func (c *Counter) Render() *component.Node {
 
 ---
 
-## 🗂️ Project Structure
+## 🎨 `goks ui` Component System
 
-A scaffolded GoKS app follows an organized, modular structure:
-
-```text
-myapp/
-├── app/                  # File-system routes & UI components (.gox)
-│   ├── layout.gox        # Root layout wrapper (HTML shell & navigation)
-│   ├── page.gox          # Home route (/)
-│   ├── about/
-│   │   └── page.gox      # Route (/about)
-│   └── components/       # App-specific UI components (.gox)
-│       └── hero.gox
-├── api/                  # Backend REST API routes and handlers
-│   └── routes.go
-├── config/               # App & server configuration
-│   └── goks.config.go
-├── middleware/           # Custom HTTP middlewares
-│   └── logger.go
-├── models/               # Database ORM models
-│   └── user.go
-├── repositories/         # Database access layer
-├── services/             # Application business logic
-├── public/               # Static assets & Tailwind CSS entrypoint
-│   ├── global.css        # Tailwind v4 configuration (@import "tailwindcss";)
-│   └── favicon.ico
-├── .goks/                # GoKS build cache & isolated workspace (auto-managed)
-├── go.mod
-└── go.sum
-```
-
----
-
-## 📖 Backend & Fullstack Features
-
-### 1. Database ORM (`models/user.go`)
-
-GoKS includes a built-in query builder with soft-delete and timestamp support:
-
-```go
-package models
-
-import "github.com/misbakhul29/goks/pkg/orm"
-
-type User struct {
-	orm.Model // Provides ID, CreatedAt, UpdatedAt, DeletedAt
-	Name  string `db:"name"`
-	Email string `db:"email"`
-}
-
-// Find a single record:
-// user, err := orm.Query[models.User]().Where("email = $1", email).First()
-
-// Query list with pagination:
-// users, err := orm.Query[models.User]().
-//     Where("deleted_at IS NULL").
-//     OrderBy("created_at DESC").
-//     Limit(10).
-//     Find()
-
-// Insert new record:
-// orm.Create(orm.DB, &User{Name: "Alex", Email: "alex@example.com"})
-```
-
-### 2. REST API & Middleware (`api/routes.go`)
-
-Register API routes and attach built-in JWT / RBAC middlewares:
-
-```go
-package api
-
-import (
-	"github.com/misbakhul29/goks/pkg/router"
-	"github.com/misbakhul29/goks/pkg/auth"
-)
-
-func RegisterRoutes(r *router.Router) {
-	// Public endpoint
-	r.GET("/api/health", func(ctx *router.Context) error {
-		return ctx.JSON(map[string]string{"status": "ok"})
-	})
-
-	// Protected endpoint with JWT & Role-Based Access Control
-	r.GET("/api/admin/users", AdminUsersHandler, auth.JWTMiddleware(), auth.RequireRole("admin"))
-}
-```
-
-### 3. `goks ui` Component System (shadcn/ui for GoKS)
-
-Quickly scaffold beautiful, accessible, production-ready Tailwind UI components directly in `.gox`:
+GoKS includes a first-class CLI component generator inspired by `shadcn/ui`. Components are written in pure `.gox` with Tailwind CSS v4 styling, fully customizable directly inside your repository.
 
 ```bash
-# List available components: button, input, card, dialog, badge, dropdown, table
+# List all available components
 goks ui list
 
-# Add components to components/ui/
-goks ui add button input card dialog
+# Install individual components
+goks ui add button input card dialog badge table dropdown
 
-# Or install all available components at once
+# Or install everything at once
 goks ui add all
 ```
 
-Use them seamlessly inside your `.gox` pages:
+| Component | File | Description & Variants |
+| :--- | :--- | :--- |
+| `button` | `components/ui/button.gox` | Variants (`primary`, `secondary`, `destructive`, `outline`, `ghost`), sizes (`sm`, `md`, `lg`) |
+| `input` | `components/ui/input.gox` | Styled text, email, password input with focus rings, disabled and error states |
+| `card` | `components/ui/card.gox` | Modular card container: `Card`, `CardHeader`, `CardTitle`, `CardDescription`, `CardContent`, `CardFooter` |
+| `dialog` | `components/ui/dialog.gox` | Accessible modal dialog with backdrop overlay and close action |
+| `badge` | `components/ui/badge.gox` | Status indicator badges (`default`, `success`, `warning`, `destructive`) |
+| `dropdown` | `components/ui/dropdown.gox` | Dropdown action menu with items and divider elements |
+| `table` | `components/ui/table.gox` | Responsive data table with styled header, alternating rows, and hover highlights |
 
-```go
-package page
+---
 
-import "myapp/components/ui"
+## 🔄 Progressive Server Actions (`pkg/action`)
 
-func (p *MyPage) Render() *component.Node {
-	return <div class="p-8 space-y-4">
-		<ui.Card>
-			<ui.CardHeader>
-				<ui.CardTitle>Welcome back</ui.CardTitle>
-				<ui.CardDescription>Enter your credentials to continue</ui.CardDescription>
-			</ui.CardHeader>
-			<ui.CardContent>
-				<ui.Input placeholder="Email address" type="email" />
-			</ui.CardContent>
-			<ui.CardFooter>
-				<ui.Button variant="primary">Sign In</ui.Button>
-			</ui.CardFooter>
-		</ui.Card>
-	</div>
-}
-```
-
-### 4. Progressive Server Actions (`pkg/action`)
-
-Execute backend Go code directly from HTML forms or client events with automatic zero-JS progressive enhancement:
+Server Actions allow you to run backend Go functions directly from HTML forms with seamless progressive enhancement:
 
 ```go
 package actions
 
 import (
+	"fmt"
 	"github.com/misbakhul29/goks/pkg/action"
+	"myapp/models"
 )
 
 func init() {
-	action.Register("subscribeNewsletter", func(ctx *action.Context) (any, error) {
+	// Register a named Server Action
+	action.Register("createSubscriber", func(ctx *action.Context) (any, error) {
 		email := ctx.FormData.Get("email")
-		// Save to database...
+		if email == "" {
+			return nil, fmt.Errorf("email is required")
+		}
+
+		// Direct database access on the server
+		// orm.Create(orm.DB, &models.Subscriber{Email: email})
+
 		return map[string]string{"message": "Subscribed successfully!"}, nil
 	})
 }
 ```
 
-In your `.gox` markup:
+In your `.gox` view:
 ```html
-<form action={action.URL("subscribeNewsletter")} method="POST">
-	<input type="email" name="email" required />
-	<button type="submit">Subscribe</button>
+<form action={action.URL("createSubscriber")} method="POST" class="space-y-4">
+	<input type="email" name="email" placeholder="name@example.com" required class="..." />
+	<button type="submit" class="...">Subscribe</button>
 </form>
 ```
-- **WASM Client**: Automatically intercepts submission with `fetch()`, updates state without page reloading.
-- **No-JS / SSR Fallback**: Submits as a regular HTML POST and redirects back cleanly with HTTP 303.
-- **Built-in Security**: Enforces same-origin CSRF verification on all actions.
 
-### 5. Islands Architecture & Selective Hydration
+- **In the Browser (WASM)**: Automatically intercepts `<form>` submits to `/__goks_action`, performs background `fetch()`, and updates the UI without full page refreshes.
+- **Zero-JS Fallback**: If JavaScript/WASM is unavailable, submits as a standard HTML form POST and redirects back with HTTP 303.
+- **CSRF Protection**: Automatically validates request origins against server host headers.
 
-GoKS defaults to zero-WASM pure HTML for static pages, eliminating client runtime overhead:
+---
 
-- **Static Pages**: If a page contains no interactive handlers, GoKS serves **pure HTML** with `0 KB` WASM downloaded.
-- **Interactive Islands**: When interactive events (`onClick`, `onChange`) or components embedding `component.ClientBase` are present, GoKS automatically hydrates the WebAssembly runtime.
+## 🏝️ Islands Architecture & Selective Hydration
+
+GoKS implements selective hydration to keep web pages fast and lightweight:
+
+1. **Pure Static Pages (0 KB WASM)**: If a page contains no event handlers (`onClick`, etc.) and no client islands, GoKS outputs **100% pure HTML**. Neither `wasm_exec.js` nor `app.wasm` is downloaded.
+2. **Interactive Islands**: When interactive elements are detected or components embed `component.ClientBase`, GoKS hydrates the WebAssembly runtime for that page.
 
 ```go
-type CounterIsland struct {
+type InteractiveWidget struct {
 	component.ComponentBase
-	component.ClientBase // Marks this component as an interactive client island
+	component.ClientBase // Enables WASM hydration for this island
 }
 ```
 
-### 6. Ultra-Compact WASM with TinyGo (`--compiler=tinygo`)
+---
 
-For production deployments where bundle size matters, compile with TinyGo to reduce WASM payload from ~2.5 MB down to **< 300 KB**:
+## 🗄️ Built-in ORM with SQLite
 
-```bash
-# Development with TinyGo
-goks dev --compiler=tinygo
-
-# Production build with TinyGo
-goks build --compiler=tinygo
-
-# Standalone single-binary with embedded TinyGo WASM
-goks build --compiler=tinygo --standalone
-```
-
-### 7. Zero-Config Embedded SQLite (`pkg/orm`)
-
-Get started instantly without spinning up external database servers:
+GoKS includes a database ORM with zero external configuration required:
 
 ```go
-import "github.com/misbakhul29/goks/pkg/orm"
+package main
+
+import (
+	"log"
+	"github.com/misbakhul29/goks/pkg/orm"
+)
+
+type Post struct {
+	orm.Model
+	Title   string `db:"title"`
+	Content string `db:"content"`
+	Author  string `db:"author"`
+}
 
 func main() {
-	// Automatically initializes SQLite database at app.db
+	// 1. Zero-config SQLite database (creates app.db automatically)
 	db, err := orm.OpenSQLite("app.db")
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer db.Close()
 
-	// Use standard fluent query builder
-	users, _ := orm.Query[User]().Where("active", "=", true).Find(db)
+	// 2. Insert record
+	newPost := &Post{Title: "Hello GoKS", Content: "Building fullstack apps in Go", Author: "Alex"}
+	_ = orm.Create(db, newPost)
+
+	// 3. Query records with fluent API
+	posts, err := orm.Query[Post]().
+		Where("author", "=", "Alex").
+		OrderBy("created_at DESC").
+		Limit(10).
+		Find(db)
 }
 ```
+
+Supports **SQLite**, **PostgreSQL**, and **MySQL**.
 
 ---
 
@@ -404,60 +356,102 @@ func main() {
 
 ---
 
-## 🚢 Deployment
+## 🚢 Deployment Guide
 
-### Standard (`goks build`)
-```bash
-goks build
-# Serve from the project directory:
-goks start 3000
-# or with custom PORT:
-PORT=8080 goks start
-```
-
-### Standalone (`goks build --standalone`) ✨
-
-Produces a **single binary** at `.goks/standalone/server` with WASM, CSS, and all static files embedded inside — no project source required at runtime.
+GoKS's `--standalone` build embeds all assets (WASM binary, compiled CSS, and public static files) directly into a **single executable binary**.
 
 ```bash
 goks build --standalone
+# Output generated at: .goks/standalone/server
 ```
 
-**VPS / Bare metal:**
+### 1. VPS / Cloud VM (Ubuntu, Debian, etc.)
+
 ```bash
-scp .goks/standalone/server user@host:/opt/myapp/server
-ssh user@host 'chmod +x /opt/myapp/server && PORT=80 /opt/myapp/server'
+# On your local machine:
+goks build --standalone
+scp .goks/standalone/server user@your-server-ip:/opt/myapp/server
+
+# On your server:
+chmod +x /opt/myapp/server
+PORT=80 /opt/myapp/server
 ```
 
-**Docker (ultra-minimal image):**
+### 2. Docker (Ultra-Minimal Scratch Image, ~15MB)
+
 ```dockerfile
+# Build stage
+FROM golang:1.22-alpine AS builder
+WORKDIR /app
+RUN apk add --no-cache curl
+RUN go install github.com/misbakhul29/goks@latest
+COPY . .
+RUN goks build --standalone
+
+# Production scratch stage
 FROM scratch
-COPY .goks/standalone/server /server
+COPY --from=builder /app/.goks/standalone/server /server
 EXPOSE 3000
-CMD ["/server"]
+ENTRYPOINT ["/server"]
 ```
 
-**Railway / Render / Fly.io:**
-Just upload `.goks/standalone/server` and set `PORT` as an environment variable. No build step needed on the platform.
+### 3. Deploying to Vercel
 
-**GitHub Actions → Vercel/Server:**
+Because Vercel serverless build images do not come with a Go compiler by default, deploy GoKS to Vercel via **GitHub Actions** using the Vercel CLI:
+
+Create `.github/workflows/deploy.yml`:
+
 ```yaml
-- name: Build standalone
-  run: |
-    go install github.com/misbakhul29/goks@latest
-    goks build --standalone
+name: Deploy to Vercel
+on:
+  push:
+    branches: [main, master]
 
-- name: Deploy
-  run: scp .goks/standalone/server ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/opt/app/server
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Install GoKS
+        run: go install github.com/misbakhul29/goks@latest
+
+      - name: Build GoKS Standalone
+        run: goks build --standalone
+
+      - name: Deploy to Vercel
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          working-directory: .goks/standalone
+```
+
+### 4. Railway, Fly.io & Render
+
+For container platforms, simply point them to the Dockerfile above or run the standalone binary directly:
+
+**Fly.io:**
+```bash
+fly launch --dockerfile Dockerfile
+fly deploy
 ```
 
 ---
 
 ## 🤝 Contributing
 
-Contributions, issues, and feature requests are welcome! Feel free to check out the issues or submit a pull request.
+Contributions, issues, and feature requests are welcome!
+Feel free to open an issue or submit a pull request on [GitHub](https://github.com/misbakhul29/goks).
+
+---
 
 ## 📄 License
 
 This project is licensed under the [MIT License](LICENSE).
-
