@@ -52,7 +52,20 @@ func InitClientRouter() {
 
 	// Intercept link clicks globally
 	js.Global().Get("document").Call("addEventListener", "click", js.FuncOf(func(_ js.Value, args []js.Value) any {
+		if len(args) == 0 {
+			return nil
+		}
 		e := args[0]
+
+		// Only intercept primary (left) mouse clicks without modifier keys (allow Ctrl/Cmd/Shift/Alt clicks to open new tab/window)
+		if e.Get("button").Int() != 0 ||
+			e.Get("metaKey").Bool() ||
+			e.Get("ctrlKey").Bool() ||
+			e.Get("shiftKey").Bool() ||
+			e.Get("altKey").Bool() {
+			return nil
+		}
+
 		target := e.Get("target")
 
 		// Find closest anchor tag up the tree
@@ -61,9 +74,26 @@ func InitClientRouter() {
 		}
 
 		if !target.IsNull() && !target.IsUndefined() {
-			href := target.Get("getAttribute").Call("call", target, "href").String()
+			// Do not intercept if link specifies target (like _blank) or download attribute or data-native
+			targetAttr := target.Get("getAttribute").Call("call", target, "target")
+			if !targetAttr.IsNull() && !targetAttr.IsUndefined() && targetAttr.String() != "" && targetAttr.String() != "_self" {
+				return nil
+			}
+			if target.Get("hasAttribute").Call("call", target, "download").Bool() {
+				return nil
+			}
+			if target.Get("hasAttribute").Call("call", target, "data-native").Bool() {
+				return nil
+			}
+
+			hrefAttr := target.Get("getAttribute").Call("call", target, "href")
+			if hrefAttr.IsNull() || hrefAttr.IsUndefined() {
+				return nil
+			}
+			href := hrefAttr.String()
+
 			// Only intercept local links starting with / that are not static file downloads
-			if len(href) > 0 && href[0] == '/' && !HasFileExtension(href) && !target.Get("hasAttribute").Call("call", target, "data-native").Bool() {
+			if len(href) > 0 && href[0] == '/' && !HasFileExtension(href) {
 				e.Call("preventDefault")
 				window.Get("history").Call("pushState", nil, "", href)
 				CurrentPath.Set(href)

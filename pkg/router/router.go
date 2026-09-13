@@ -152,6 +152,12 @@ func normalizePath(p string) string {
 	if !strings.HasPrefix(p, "/") {
 		p = "/" + p
 	}
+	for strings.Contains(p, "//") {
+		p = strings.ReplaceAll(p, "//", "/")
+	}
+	if len(p) > 1 && strings.HasSuffix(p, "/") {
+		p = strings.TrimSuffix(p, "/")
+	}
 	return p
 }
 
@@ -172,7 +178,7 @@ func (r *Router) Group(prefix string, mw ...MiddlewareFunc) *Group {
 }
 
 func (g *Group) handle(method, pattern string, h Handler) {
-	full := g.prefix + normalizePath(pattern)
+	full := normalizePath(g.prefix + "/" + strings.TrimPrefix(pattern, "/"))
 	// Wrap handler with group middlewares
 	for i := len(g.middlewares) - 1; i >= 0; i-- {
 		h = g.middlewares[i](h)

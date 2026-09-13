@@ -197,7 +197,7 @@ func (s *DevServer) setupStandaloneRoutes() {
 			ctx.Response().WriteHeader(http.StatusNotFound)
 			return nil
 		}
-		http.StripPrefix("/public/", http.FileServer(publicFS)).ServeHTTP(
+		http.StripPrefix("/public/", http.FileServer(noDirListingFS{publicFS})).ServeHTTP(
 			ctx.Response(), ctx.Request(),
 		)
 		return nil
@@ -288,7 +288,7 @@ func (s *DevServer) setupDiskRoutes() {
 			ctx.Response().Header().Set("Content-Type", "application/wasm")
 		}
 
-		http.StripPrefix("/public/", http.FileServer(http.Dir(publicDir))).ServeHTTP(
+		http.StripPrefix("/public/", http.FileServer(noDirListingFS{http.Dir(publicDir)})).ServeHTTP(
 			ctx.Response(), ctx.Request(),
 		)
 		return nil
@@ -311,6 +311,32 @@ func (s *DevServer) setupDiskRoutes() {
 	s.router.GET("/", func(ctx *router.Context) error {
 		return s.serveShell(ctx)
 	})
+}
+
+// noDirListingFS wraps http.FileSystem to prevent directory listings.
+type noDirListingFS struct {
+	fs http.FileSystem
+}
+
+func (nfs noDirListingFS) Open(path string) (http.File, error) {
+	f, err := nfs.fs.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	s, err := f.Stat()
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+	if s.IsDir() {
+		// If requesting directory, only allow if index.html exists, otherwise return 404
+		index := filepath.Join(path, "index.html")
+		if _, err := nfs.fs.Open(index); err != nil {
+			f.Close()
+			return nil, os.ErrNotExist
+		}
+	}
+	return f, nil
 }
 
 // serveShell renders the HTML shell that bootstraps the WASM app.

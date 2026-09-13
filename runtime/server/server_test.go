@@ -181,5 +181,14 @@ func TestStaticFileServing_PublicRoot(t *testing.T) {
 	if w404.Code != 404 {
 		t.Fatalf("expected 404 Not Found for /nonexistent, got %d", w404.Code)
 	}
+
+	// Test GET /public/ does not list directory
+	reqDir := httptest.NewRequest("GET", "/public/", nil)
+	wDir := httptest.NewRecorder()
+	srv.router.ServeHTTP(wDir, reqDir)
+
+	if wDir.Code != 404 {
+		t.Fatalf("expected 404 for directory listing on /public/, got %d", wDir.Code)
+	}
 }
 

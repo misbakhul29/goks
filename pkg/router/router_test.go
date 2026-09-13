@@ -160,6 +160,20 @@ func TestRouter_Group(t *testing.T) {
 	if w.Body.String() != "pong" {
 		t.Fatalf("expected 'pong', got %q", w.Body.String())
 	}
+
+	// Test group with trailing slash in prefix and leading slash in pattern
+	api2 := r.Group("/v2/")
+	api2.GET("/users", func(ctx *router.Context) error {
+		return ctx.Text("users-list")
+	})
+
+	req2 := httptest.NewRequest(http.MethodGet, "/v2/users", nil)
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+
+	if w2.Code != http.StatusOK || w2.Body.String() != "users-list" {
+		t.Fatalf("expected 200 'users-list', got %d %q", w2.Code, w2.Body.String())
+	}
 }
 
 func TestUseRouter(t *testing.T) {
