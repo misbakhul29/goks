@@ -260,10 +260,11 @@ func compileWasmAndServer(appDir, compilerType string) ([]byte, error) {
 	
 	var cmdWasm *exec.Cmd
 	if compilerType == "tinygo" {
-		if _, err := exec.LookPath("tinygo"); err != nil {
-			return []byte("tinygo not found in PATH. Install TinyGo or omit --compiler=tinygo"), err
+		tinyBin, err := ensureTinyGo()
+		if err != nil {
+			return []byte(err.Error()), err
 		}
-		cmdWasm = exec.Command("tinygo", "build", "-o", filepath.Join(outDir, "app.wasm"), "-target=wasm", "-no-debug", ".")
+		cmdWasm = exec.Command(tinyBin, "build", "-o", filepath.Join(outDir, "app.wasm"), "-target=wasm", "-no-debug", ".")
 	} else {
 		cmdWasm = exec.Command("go", "build", "-o", filepath.Join(outDir, "app.wasm"), ".")
 		cmdWasm.Env = append(os.Environ(), "GOOS=js", "GOARCH=wasm")

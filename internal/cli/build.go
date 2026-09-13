@@ -104,12 +104,15 @@ func BuildCmd() *cobra.Command {
 
 func locateWasmExec(compilerType string) (string, error) {
 	if compilerType == "tinygo" {
-		out, err := exec.Command("tinygo", "env", "TINYGOROOT").Output()
+		tinyBin, err := ensureTinyGo()
 		if err == nil {
-			tinyRoot := strings.TrimSpace(string(out))
-			candidate := filepath.Join(tinyRoot, "targets", "wasm_exec.js")
-			if _, err := os.Stat(candidate); err == nil {
-				return candidate, nil
+			out, err := exec.Command(tinyBin, "env", "TINYGOROOT").Output()
+			if err == nil {
+				tinyRoot := strings.TrimSpace(string(out))
+				candidate := filepath.Join(tinyRoot, "targets", "wasm_exec.js")
+				if _, err := os.Stat(candidate); err == nil {
+					return candidate, nil
+				}
 			}
 		}
 	}
@@ -157,10 +160,11 @@ func buildWASM(cwd, outDir, compilerType string) error {
 
 	var cmd *exec.Cmd
 	if compilerType == "tinygo" {
-		if _, err := exec.LookPath("tinygo"); err != nil {
-			return fmt.Errorf("tinygo not found in PATH. Install TinyGo from https://tinygo.org/getting-started/install/ or omit --compiler=tinygo")
+		tinyBin, err := ensureTinyGo()
+		if err != nil {
+			return err
 		}
-		cmd = exec.Command("tinygo", "build", "-o", outPath, "-target=wasm", "-no-debug", ".")
+		cmd = exec.Command(tinyBin, "build", "-o", outPath, "-target=wasm", "-no-debug", ".")
 	} else {
 		cmd = exec.Command("go", "build", "-o", outPath, ".")
 		cmd.Env = append(os.Environ(), "GOOS=js", "GOARCH=wasm")
