@@ -99,7 +99,11 @@ func DevCmd() *cobra.Command {
 
 			// 3. Start the GoKS Child Server
 			var childCmd *exec.Cmd
+			var childMutex sync.Mutex
 			startChild := func() {
+				childMutex.Lock()
+				defer childMutex.Unlock()
+
 				if childCmd != nil && childCmd.Process != nil {
 					childCmd.Process.Kill()
 					childCmd.Wait()
@@ -146,6 +150,12 @@ func DevCmd() *cobra.Command {
 			})
 			if err == nil {
 				w.Watch(filepath.Join(appDir, "app"))
+				if _, err := os.Stat(filepath.Join(appDir, "public")); err == nil {
+					w.Watch(filepath.Join(appDir, "public"))
+				}
+				if _, err := os.Stat(filepath.Join(appDir, "config")); err == nil {
+					w.Watch(filepath.Join(appDir, "config"))
+				}
 				w.Start()
 			}
 

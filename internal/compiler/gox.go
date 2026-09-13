@@ -12,6 +12,7 @@ import (
 // and cleaning up any generated .go files in the source app directory.
 func PrepareWorkspace(appDir string) error {
 	workspaceDir := filepath.Join(appDir, ".goks", "workspace")
+	_ = os.RemoveAll(workspaceDir)
 	if err := os.MkdirAll(workspaceDir, 0755); err != nil {
 		return err
 	}

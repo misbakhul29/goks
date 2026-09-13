@@ -151,7 +151,7 @@ func getGoKSVersion() string {
 			return info.Main.Version
 		}
 	}
-	return "v0.1.0"
+	return "v0.7.2"
 }
 
 func writeEntryGoMod(entryDir, appDir, moduleName string) error {
@@ -510,19 +510,20 @@ func writeServerMain(entryDir, appDir, moduleName string, isProd bool) error {
 		Root:    &AppRouter{},
 	}`, appDirStr, devModeStr)
 	if hasConfig {
-		configInit = fmt.Sprintf(`	port := 3000
+		configInit = fmt.Sprintf(`	cfg := config.ServerConfig()
+	if cfg.Port == 0 {
+		cfg.Port = 3000
+	}
 	if envPort := os.Getenv("PORT"); envPort != "" {
 		if p, err := strconv.Atoi(envPort); err == nil {
-			port = p
+			cfg.Port = p
 		}
 	}
 	if envPort := os.Getenv("GOKS_CHILD_PORT"); envPort != "" {
 		if p, err := strconv.Atoi(envPort); err == nil {
-			port = p
+			cfg.Port = p
 		}
 	}
-	cfg := config.ServerConfig()
-	cfg.Port = port
 	cfg.AppDir = %s
 	cfg.DevMode = %s
 	cfg.Root = &AppRouter{}`, appDirStr, devModeStr)
@@ -583,17 +584,16 @@ func writeStandaloneServerMain(entryDir, appDir, moduleName string) error {
 
 	// Build config init
 	var configB strings.Builder
-	configB.WriteString(`	port := 3000
-	if envPort := os.Getenv("PORT"); envPort != "" {
-		if p, err := strconv.Atoi(envPort); err == nil {
-			port = p
-		}
-	}
-`)
-
 	if hasConfig {
 		configB.WriteString(`	cfg := config.ServerConfig()
-	cfg.Port = port
+	if cfg.Port == 0 {
+		cfg.Port = 3000
+	}
+	if envPort := os.Getenv("PORT"); envPort != "" {
+		if p, err := strconv.Atoi(envPort); err == nil {
+			cfg.Port = p
+		}
+	}
 	cfg.AppDir = "."
 	cfg.DevMode = false
 	cfg.Standalone = true
@@ -603,7 +603,13 @@ func writeStandaloneServerMain(entryDir, appDir, moduleName string) error {
 			configB.WriteString("\n\tcfg.EmbeddedPublic = embeddedPublic")
 		}
 	} else {
-		configB.WriteString(`	cfg := server.Config{
+		configB.WriteString(`	port := 3000
+	if envPort := os.Getenv("PORT"); envPort != "" {
+		if p, err := strconv.Atoi(envPort); err == nil {
+			port = p
+		}
+	}
+	cfg := server.Config{
 		Port:           port,
 		AppDir:         ".",
 		DevMode:        false,

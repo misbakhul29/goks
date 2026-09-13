@@ -196,9 +196,17 @@ func buildStandalone(cwd, buildDir, wasmExecPath string) error {
 		}
 	}
 
-	// Copy public/ directory into entry dir so it can be embedded
 	publicSrc := filepath.Join(cwd, "public")
 	publicDst := filepath.Join(entryDir, "public")
+
+	defer func() {
+		for _, dst := range assetsToCopy {
+			os.Remove(dst)
+		}
+		os.RemoveAll(publicDst)
+	}()
+
+	// Copy public/ directory into entry dir so it can be embedded
 	hasPublic := false
 	if _, err := os.Stat(publicSrc); err == nil {
 		hasPublic = true
@@ -228,12 +236,6 @@ func buildStandalone(cwd, buildDir, wasmExecPath string) error {
 	cmd.Dir = entryDir
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	buildErr := cmd.Run()
-
-	// ── Cleanup: remove temporary asset copies from entry dir ─────────────────
-	for _, dst := range assetsToCopy {
-		os.Remove(dst)
-	}
-	os.RemoveAll(publicDst)
 
 	if buildErr != nil {
 		return fmt.Errorf("standalone build failed: %w", buildErr)

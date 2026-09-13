@@ -119,15 +119,14 @@ func (f *Font) HeadHTML() string {
 	sb.WriteString(fmt.Sprintf(`  <link rel="stylesheet" href="%s" />`, googleFontsURL))
 	sb.WriteString("\n")
 
-	// Declare the CSS variable and class
-	display := f.display
+	// Declare the CSS variable on :root and provide a utility class
+	display := sanitizeCSS(f.display)
 	if display == "" {
 		display = "swap"
 	}
 	sb.WriteString("  <style>\n")
-	sb.WriteString(fmt.Sprintf("    .%s {\n", f.class))
-	sb.WriteString(fmt.Sprintf("      %s: '%s', sans-serif;\n", f.variable, f.name))
-	sb.WriteString("    }\n")
+	sb.WriteString(fmt.Sprintf("    :root {\n      %s: '%s', sans-serif;\n    }\n", f.variable, f.name))
+	sb.WriteString(fmt.Sprintf("    .%s {\n      font-family: '%s', sans-serif;\n      %s: '%s', sans-serif;\n    }\n", f.class, f.name, f.variable, f.name))
 	sb.WriteString("  </style>\n")
 
 	return sb.String()
@@ -226,9 +225,8 @@ func AllFontsHeadHTML() string {
 		googleFontsURL := f.buildGoogleFontsURL()
 		sb.WriteString(fmt.Sprintf(`  <link rel="stylesheet" href="%s" />`, googleFontsURL) + "\n")
 		sb.WriteString("  <style>\n")
-		sb.WriteString(fmt.Sprintf("    .%s {\n", f.class))
-		sb.WriteString(fmt.Sprintf("      %s: '%s', sans-serif;\n", f.variable, f.name))
-		sb.WriteString("    }\n")
+		sb.WriteString(fmt.Sprintf("    :root {\n      %s: '%s', sans-serif;\n    }\n", f.variable, f.name))
+		sb.WriteString(fmt.Sprintf("    .%s {\n      font-family: '%s', sans-serif;\n      %s: '%s', sans-serif;\n    }\n", f.class, f.name, f.variable, f.name))
 		sb.WriteString("  </style>\n")
 	}
 
@@ -237,8 +235,11 @@ func AllFontsHeadHTML() string {
 
 // newFont is the internal constructor used by all font factory functions.
 func newFont(name, familyID string, opts Options) *Font {
+	name = sanitizeCSS(name)
+	familyID = sanitizeCSS(familyID)
+
 	// Derive CSS variable name if not provided
-	variable := opts.Variable
+	variable := sanitizeCSS(opts.Variable)
 	if variable == "" {
 		slug := strings.ToLower(strings.ReplaceAll(name, " ", "-"))
 		variable = "--font-" + slug
@@ -257,12 +258,12 @@ func newFont(name, familyID string, opts Options) *Font {
 		weights = []string{"400"}
 	}
 
-	style := opts.Style
+	style := sanitizeCSS(opts.Style)
 	if style == "" {
 		style = "normal"
 	}
 
-	display := opts.Display
+	display := sanitizeCSS(opts.Display)
 	if display == "" {
 		display = "swap"
 	}
@@ -279,4 +280,14 @@ func newFont(name, familyID string, opts Options) *Font {
 	}
 
 	return register(f)
+}
+
+func sanitizeCSS(s string) string {
+	replacer := strings.NewReplacer(
+		"<", "", ">", "",
+		"\"", "", "'", "",
+		";", "", "{", "", "}", "",
+		"\n", "", "\r", "",
+	)
+	return replacer.Replace(s)
 }

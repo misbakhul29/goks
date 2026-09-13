@@ -3,6 +3,7 @@ package rbac
 
 import (
 	"net/http"
+	"sync"
 
 	"github.com/misbakhul29/goks/pkg/auth"
 	"github.com/misbakhul29/goks/pkg/router"
@@ -19,6 +20,7 @@ type Role struct {
 
 // Registry holds all defined roles.
 type Registry struct {
+	mu    sync.RWMutex
 	roles map[string]*Role
 }
 
@@ -35,12 +37,16 @@ func NewRegistry() *Registry {
 //	rbac.Default.Define("admin", "posts.create", "posts.delete", "users.manage")
 //	rbac.Default.Define("editor", "posts.create", "posts.update")
 func (r *Registry) Define(roleName string, perms ...Permission) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.roles[roleName] = &Role{Name: roleName, Permissions: perms}
 }
 
 // Has checks if a role has a specific permission.
 func (r *Registry) Has(roleName string, perm Permission) bool {
+	r.mu.RLock()
 	role, ok := r.roles[roleName]
+	r.mu.RUnlock()
 	if !ok {
 		return false
 	}
@@ -54,6 +60,9 @@ func (r *Registry) Has(roleName string, perm Permission) bool {
 
 // UserHas checks if the current user has a permission (checks all their roles).
 func (r *Registry) UserHas(user *auth.User, perm Permission) bool {
+	if user == nil {
+		return false
+	}
 	for _, roleName := range user.Roles {
 		if r.Has(roleName, perm) {
 			return true

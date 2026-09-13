@@ -34,14 +34,27 @@ type entry struct {
 type MemoryCache struct {
 	mu      sync.RWMutex
 	entries map[string]*entry
+	stopCh  chan struct{}
 }
 
 // NewMemory creates a new in-memory cache.
 // It automatically runs a background goroutine to expire stale entries.
 func NewMemory() *MemoryCache {
-	c := &MemoryCache{entries: make(map[string]*entry)}
+	c := &MemoryCache{
+		entries: make(map[string]*entry),
+		stopCh:  make(chan struct{}),
+	}
 	go c.gcLoop()
 	return c
+}
+
+// Close stops the background GC goroutine.
+func (c *MemoryCache) Close() {
+	select {
+	case <-c.stopCh:
+	default:
+		close(c.stopCh)
+	}
 }
 
 func (c *MemoryCache) Get(key string) (any, bool) {
@@ -95,15 +108,20 @@ func (c *MemoryCache) Remember(key string, ttl time.Duration, fn func() any) any
 func (c *MemoryCache) gcLoop() {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
-	for range ticker.C {
-		now := time.Now()
-		c.mu.Lock()
-		for k, e := range c.entries {
-			if !e.noExpiry && now.After(e.expiresAt) {
-				delete(c.entries, k)
+	for {
+		select {
+		case <-c.stopCh:
+			return
+		case <-ticker.C:
+			now := time.Now()
+			c.mu.Lock()
+			for k, e := range c.entries {
+				if !e.noExpiry && now.After(e.expiresAt) {
+					delete(c.entries, k)
+				}
 			}
+			c.mu.Unlock()
 		}
-		c.mu.Unlock()
 	}
 }
 
