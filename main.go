@@ -51,7 +51,7 @@ func versionCmd() *cobra.Command {
 		Use:   "version",
 		Short: "Print the GoKS version",
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Println(color.CyanString("GoKS") + " v0.8.0")
+			fmt.Println(color.CyanString("GoKS") + " v0.8.1")
 		},
 	}
 }
