@@ -3,7 +3,6 @@ package cli
 import (
 	"fmt"
 	"html"
-	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -38,6 +37,7 @@ func getFreePort() int {
 func DevCmd() *cobra.Command {
 	var port int
 	var appDir string
+	var compilerType string
 
 	cmd := &cobra.Command{
 		Use:   "dev",
@@ -65,7 +65,7 @@ func DevCmd() *cobra.Command {
 			// 1. Generate & Compile Initial
 			fmt.Print(color.HiBlackString("  [1/2] Compiling WASM & Server... "))
 			start := time.Now()
-			out, err := compileWasmAndServer(appDir)
+			out, err := compileWasmAndServer(appDir, compilerType)
 			if err != nil {
 				buildError = string(out)
 				fmt.Printf("%s\n", color.RedString("error"))
@@ -129,7 +129,7 @@ func DevCmd() *cobra.Command {
 			w, err := watcher.New(500*time.Millisecond, func(ev watcher.Event) {
 				fmt.Printf("\n%s %s\n", color.YellowString("↻ Change detected:"), ev.Path)
 				start = time.Now()
-				out, err := compileWasmAndServer(appDir)
+				out, err := compileWasmAndServer(appDir, compilerType)
 				
 				buildErrorMutex.Lock()
 				if err != nil {
@@ -189,28 +189,41 @@ func DevCmd() *cobra.Command {
 						<pre>` + html.EscapeString(errStr) + `</pre>
 						` + livereload.Script() + `
 					</body>
-					</html>
-					`))
+					</html>`))
 					return
 				}
+
 				proxy.ServeHTTP(w, r)
 			})
 
-			server := &http.Server{Addr: fmt.Sprintf(":%d", port)}
+			server := &http.Server{
+				Addr: fmt.Sprintf(":%d", port),
+			}
+
+			// Handle Ctrl+C gracefully
+			sigChan := make(chan os.Signal, 1)
+			signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 			go func() {
-				if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-					log.Fatalf("Listen error: %s\n", err)
+				<-sigChan
+				fmt.Println(color.YellowString("\n  Stopping server..."))
+				childMutex.Lock()
+				if childCmd != nil && childCmd.Process != nil {
+					childCmd.Process.Kill()
 				}
+				childMutex.Unlock()
+				server.Close()
+				os.Exit(0)
 			}()
 
-			// Block until signal received
-			c := make(chan os.Signal, 1)
-			signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-			<-c
+			if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				return err
+			}
 
+			childMutex.Lock()
 			if childCmd != nil && childCmd.Process != nil {
 				childCmd.Process.Kill()
 			}
+			childMutex.Unlock()
 			server.Close()
 
 			return nil
@@ -219,10 +232,11 @@ func DevCmd() *cobra.Command {
 
 	cmd.Flags().IntVarP(&port, "port", "p", 3000, "Port to listen on")
 	cmd.Flags().StringVarP(&appDir, "dir", "d", "", "App directory (default: current dir)")
+	cmd.Flags().StringVar(&compilerType, "compiler", "go", "WASM compiler to use: 'go' (default) or 'tinygo'")
 	return cmd
 }
 
-func compileWasmAndServer(appDir string) ([]byte, error) {
+func compileWasmAndServer(appDir, compilerType string) ([]byte, error) {
 	// Prepare workspace & transpile .gox files into .goks/workspace
 	if err := compiler.PrepareWorkspace(appDir); err != nil {
 		return []byte(err.Error()), err
@@ -244,13 +258,27 @@ func compileWasmAndServer(appDir string) ([]byte, error) {
 	outDir := filepath.Join(appDir, ".goks", "build")
 	os.MkdirAll(outDir, 0755)
 	
-	cmdWasm := exec.Command("go", "build", "-o", filepath.Join(outDir, "app.wasm"), ".")
-	cmdWasm.Env = append(os.Environ(), "GOOS=js", "GOARCH=wasm")
+	var cmdWasm *exec.Cmd
+	if compilerType == "tinygo" {
+		if _, err := exec.LookPath("tinygo"); err != nil {
+			return []byte("tinygo not found in PATH. Install TinyGo or omit --compiler=tinygo"), err
+		}
+		cmdWasm = exec.Command("tinygo", "build", "-o", filepath.Join(outDir, "app.wasm"), "-target=wasm", "-no-debug", ".")
+	} else {
+		cmdWasm = exec.Command("go", "build", "-o", filepath.Join(outDir, "app.wasm"), ".")
+		cmdWasm.Env = append(os.Environ(), "GOOS=js", "GOARCH=wasm")
+	}
+
 	cmdWasm.Dir = entryDir
 	if out, err := cmdWasm.CombinedOutput(); err != nil {
 		return out, err
 	}
 	
+	// Copy wasm_exec.js for the selected compiler
+	if wasmExec, err := locateWasmExec(compilerType); err == nil {
+		_ = copyFile(wasmExec, filepath.Join(outDir, "wasm_exec.js"))
+	}
+
 	// Compile Server
 	cmdServer := exec.Command("go", "build", "-o", "goks-server", ".")
 	cmdServer.Dir = entryDir

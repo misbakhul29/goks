@@ -260,6 +260,7 @@ type Dialect interface {
 
 type postgresDialect struct{}
 type mysqlDialect struct{}
+type sqliteDialect struct{}
 
 func (postgresDialect) Placeholder(n int) string { return fmt.Sprintf("$%d", n) }
 func (postgresDialect) SupportsReturning() bool  { return true }
@@ -267,11 +268,41 @@ func (postgresDialect) SupportsReturning() bool  { return true }
 func (mysqlDialect) Placeholder(_ int) string    { return "?" }
 func (mysqlDialect) SupportsReturning() bool     { return false }
 
+func (sqliteDialect) Placeholder(_ int) string   { return "?" }
+func (sqliteDialect) SupportsReturning() bool    { return false }
+
 func dialectFor(driver string) Dialect {
 	switch driver {
 	case "postgres", "pgx":
 		return postgresDialect{}
+	case "sqlite", "sqlite3":
+		return sqliteDialect{}
 	default:
 		return mysqlDialect{}
 	}
+}
+
+// OpenSQLite opens or creates a local SQLite database with concurrency-safe defaults.
+// If path is omitted, it defaults to "./app.db".
+// Note: Requires a registered SQLite driver in the application (e.g. _ "modernc.org/sqlite" or _ "github.com/mattn/go-sqlite3").
+func OpenSQLite(path ...string) (*Database, error) {
+	dbPath := "./app.db"
+	if len(path) > 0 && path[0] != "" {
+		dbPath = path[0]
+	}
+
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		db, err = sql.Open("sqlite3", dbPath)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("goks/orm: open sqlite: %w", err)
+	}
+
+	// SQLite performs best with a single writer connection to prevent "database is locked" errors
+	db.SetMaxOpenConns(1)
+
+	d := &Database{db: db, dialect: sqliteDialect{}}
+	DB = d
+	return d, nil
 }

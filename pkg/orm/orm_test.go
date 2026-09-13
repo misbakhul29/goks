@@ -68,3 +68,18 @@ func TestFieldPointers_EmbeddedModel(t *testing.T) {
 		t.Fatalf("expected item.Title to be 'Test Product', got %s", item.Title)
 	}
 }
+
+func TestDialect_SQLite(t *testing.T) {
+	d := dialectFor("sqlite3")
+	if d.Placeholder(1) != "?" {
+		t.Errorf("expected ? for SQLite placeholder, got %s", d.Placeholder(1))
+	}
+	if d.SupportsReturning() {
+		t.Errorf("expected SupportsReturning to be false for SQLite")
+	}
+
+	d2 := dialectFor("sqlite")
+	if d2.Placeholder(1) != "?" {
+		t.Errorf("expected ? for SQLite placeholder, got %s", d2.Placeholder(1))
+	}
+}

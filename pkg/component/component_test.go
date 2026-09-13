@@ -183,3 +183,25 @@ func TestRenderToString_EscapesTextAndAttrs(t *testing.T) {
 	}
 }
 
+func TestNeedsHydration(t *testing.T) {
+	// Static node: no event handlers
+	staticNode := component.H("div", component.Props{"class": "container"}, component.Text("Static Content"))
+	if component.NeedsHydration(staticNode) {
+		t.Errorf("expected static node to not need hydration")
+	}
+
+	// Interactive node with onClick
+	interactiveNode := component.H("button", component.Props{
+		"onClick": func() {},
+	}, component.Text("Click me"))
+	if !component.NeedsHydration(interactiveNode) {
+		t.Errorf("expected interactive node with onClick to need hydration")
+	}
+
+	// Nested interactive child
+	parent := component.H("div", nil, interactiveNode)
+	if !component.NeedsHydration(parent) {
+		t.Errorf("expected parent with interactive child to need hydration")
+	}
+}
+

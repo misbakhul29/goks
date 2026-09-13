@@ -18,6 +18,7 @@ import (
 // BuildCmd returns the `goks build` subcommand.
 func BuildCmd() *cobra.Command {
 	var standalone bool
+	var compilerType string
 
 	cmd := &cobra.Command{
 		Use:   "build",
@@ -54,7 +55,7 @@ func BuildCmd() *cobra.Command {
 			tidyCmd.Dir = entryDir
 			_ = tidyCmd.Run()
 
-			if err := buildWASM(cwd, goksBuildDir); err != nil {
+			if err := buildWASM(cwd, goksBuildDir, compilerType); err != nil {
 				return err
 			}
 			if err := buildCSS(cwd, goksBuildDir); err != nil {
@@ -62,15 +63,9 @@ func BuildCmd() *cobra.Command {
 			}
 
 			// Copy wasm_exec.js into .goks/build for production
-			goRoot := os.Getenv("GOROOT")
-			if goRoot == "" {
-				if out, err := exec.Command("go", "env", "GOROOT").Output(); err == nil {
-					goRoot = strings.TrimSpace(string(out))
-				}
-			}
-			wasmExec := filepath.Join(goRoot, "misc", "wasm", "wasm_exec.js")
-			if _, err := os.Stat(wasmExec); os.IsNotExist(err) {
-				wasmExec = filepath.Join(goRoot, "lib", "wasm", "wasm_exec.js")
+			wasmExec, err := locateWasmExec(compilerType)
+			if err != nil {
+				return err
 			}
 			copyFile(wasmExec, filepath.Join(goksBuildDir, "wasm_exec.js"))
 
@@ -103,7 +98,36 @@ func BuildCmd() *cobra.Command {
 	}
 
 	cmd.Flags().BoolVar(&standalone, "standalone", false, "Build a self-contained binary with all assets embedded (like Next.js output: standalone)")
+	cmd.Flags().StringVar(&compilerType, "compiler", "go", "WASM compiler to use: 'go' (default) or 'tinygo' (ultra-compact <300KB WASM)")
 	return cmd
+}
+
+func locateWasmExec(compilerType string) (string, error) {
+	if compilerType == "tinygo" {
+		out, err := exec.Command("tinygo", "env", "TINYGOROOT").Output()
+		if err == nil {
+			tinyRoot := strings.TrimSpace(string(out))
+			candidate := filepath.Join(tinyRoot, "targets", "wasm_exec.js")
+			if _, err := os.Stat(candidate); err == nil {
+				return candidate, nil
+			}
+		}
+	}
+
+	goRoot := os.Getenv("GOROOT")
+	if goRoot == "" {
+		if out, err := exec.Command("go", "env", "GOROOT").Output(); err == nil {
+			goRoot = strings.TrimSpace(string(out))
+		}
+	}
+	wasmExec := filepath.Join(goRoot, "misc", "wasm", "wasm_exec.js")
+	if _, err := os.Stat(wasmExec); os.IsNotExist(err) {
+		wasmExec = filepath.Join(goRoot, "lib", "wasm", "wasm_exec.js")
+	}
+	if _, err := os.Stat(wasmExec); err == nil {
+		return wasmExec, nil
+	}
+	return "", fmt.Errorf("wasm_exec.js not found in GOROOT: %s", goRoot)
 }
 
 func copyFile(src, dst string) error {
@@ -121,18 +145,44 @@ func copyFile(src, dst string) error {
 	return err
 }
 
-func buildWASM(cwd, outDir string) error {
-	fmt.Print("  [1/3] Compiling WASM frontend...")
+func buildWASM(cwd, outDir, compilerType string) error {
+	compilerLabel := "Go"
+	if compilerType == "tinygo" {
+		compilerLabel = "TinyGo"
+	}
+	fmt.Printf("  [1/3] Compiling WASM frontend (%s)...", compilerLabel)
 	start := time.Now()
 	entryDir := filepath.Join(cwd, ".goks", "entry")
-	cmd := exec.Command("go", "build", "-o", filepath.Join(outDir, "app.wasm"), ".")
+	outPath := filepath.Join(outDir, "app.wasm")
+
+	var cmd *exec.Cmd
+	if compilerType == "tinygo" {
+		if _, err := exec.LookPath("tinygo"); err != nil {
+			return fmt.Errorf("tinygo not found in PATH. Install TinyGo from https://tinygo.org/getting-started/install/ or omit --compiler=tinygo")
+		}
+		cmd = exec.Command("tinygo", "build", "-o", outPath, "-target=wasm", "-no-debug", ".")
+	} else {
+		cmd = exec.Command("go", "build", "-o", outPath, ".")
+		cmd.Env = append(os.Environ(), "GOOS=js", "GOARCH=wasm")
+	}
+
 	cmd.Dir = entryDir
-	cmd.Env = append(os.Environ(), "GOOS=js", "GOARCH=wasm")
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("WASM build failed: %w", err)
 	}
-	fmt.Printf(" %s (%v)\n", color.GreenString("done"), time.Since(start).Round(time.Millisecond))
+
+	sizeStr := ""
+	if fi, err := os.Stat(outPath); err == nil {
+		sizeKB := float64(fi.Size()) / 1024.0
+		if sizeKB > 1024 {
+			sizeStr = fmt.Sprintf(" — %.1f MB", sizeKB/1024.0)
+		} else {
+			sizeStr = fmt.Sprintf(" — %.0f KB", sizeKB)
+		}
+	}
+
+	fmt.Printf(" %s (%v%s)\n", color.GreenString("done"), time.Since(start).Round(time.Millisecond), sizeStr)
 	return nil
 }
 

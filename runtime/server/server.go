@@ -21,6 +21,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/misbakhul29/goks/internal/livereload"
 	"github.com/misbakhul29/goks/internal/watcher"
+	"github.com/misbakhul29/goks/pkg/action"
 	"github.com/misbakhul29/goks/pkg/component"
 	"github.com/misbakhul29/goks/pkg/font/google"
 	"github.com/misbakhul29/goks/pkg/metadata"
@@ -133,6 +134,12 @@ func (s *DevServer) setupRoutes() {
 	// RPC Endpoint
 	s.router.POST("/__goks_rpc", func(ctx *router.Context) error {
 		rpc.Handler().ServeHTTP(ctx.Response(), ctx.Request())
+		return nil
+	})
+
+	// Server Actions Endpoint
+	s.router.POST("/__goks_action", func(ctx *router.Context) error {
+		action.Handler().ServeHTTP(ctx.Response(), ctx.Request())
 		return nil
 	})
 
@@ -438,7 +445,10 @@ func renderDocumentHTML(htmlNode *component.Node, meta metadata.Metadata, envScr
 	}
 
 	// 2. Prepare <body>
-	wasmBootScript := `
+	needsHydration := component.NeedsHydration(htmlNode)
+	wasmBootScript := ""
+	if needsHydration {
+		wasmBootScript = `
   <script src="/wasm_exec.js"></script>
   <script>
     const go = new Go();
@@ -450,7 +460,9 @@ func renderDocumentHTML(htmlNode *component.Node, meta metadata.Metadata, envScr
         console.error("Failed to load WASM:", err);
       });
   </script>
-  ` + lrScript
+`
+	}
+	wasmBootScript += lrScript
 
 	if bodyNode == nil {
 		bodyNode = &component.Node{

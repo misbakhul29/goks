@@ -10,16 +10,20 @@ It embraces a "batteries-included" philosophy, combining a React/Next.js-like de
 
 - **🚀 GOX Syntax (`.gox`):** Write declarative, JSX-like markup directly in Go (`<div><h1>...</h1></div>`, `<c.Button />`, `{variable}`). Transpiled automatically into clean Go code in an isolated workspace.
 - **⚡ Tailwind CSS v4 Built-in:** Zero-config Tailwind CSS v4 powered by the standalone Rust compiler. No Node.js or npm dependencies required—GoKS downloads and manages the CLI automatically.
+- **🎨 `goks ui` Component System:** A `shadcn/ui`-inspired CLI generator that adds production-ready, fully styled Tailwind `.gox` components (`button`, `input`, `card`, `dialog`, `badge`, `dropdown`, `table`) right into your project.
+- **⚡ TinyGo WASM Support:** Optional `--compiler=tinygo` build mode yielding ultra-compact client WebAssembly bundles (<300 KB) with instant boot times.
+- **🏝️ Islands Architecture & Selective Hydration:** Static pages render 100% pure HTML with 0-WASM overhead. WebAssembly hydration is selectively loaded only for interactive client islands (`component.ClientBase` or event handlers).
+- **🔄 Progressive Server Actions (`pkg/action`):** Next.js-style server functions with dual-mode execution—submits seamlessly via async WASM `fetch()`, with automatic zero-JS HTML form fallback and CSRF protection.
+- **🗄️ Built-in ORM with SQLite:** Fluent, type-safe query builder (`orm.Query[T]().Where(...)`), auto-timestamps, soft-deletes, migrations, and zero-config local database with `orm.OpenSQLite("app.db")`.
 - **🪝 React-like Hooks:** Functional component state management with `component.UseState()` and dynamic node wrapping with `component.Any()`.
 - **🛠️ Powerful CLI Tooling:**
   - `goks new` — Scaffold full-stack applications with an opinionated structure.
   - `goks dev` — Instant hot-reload server with WASM compilation, Tailwind watcher, and browser compile-error overlay.
   - `goks page` & `goks generate` — Scaffold pages, reusable components, and ORM models.
+  - `goks ui add` — Add accessible, styled components into `components/ui/`.
   - `goks build` & `goks start` — Optimized production builds and server launcher.
   - `goks build --standalone` — Bundle everything (WASM, CSS, assets) into a **single self-contained binary**. No project source needed at runtime.
 - **📁 File-System Routing:** Next.js App Router style routing inside the `app/` directory (`page.gox`, `layout.gox`).
-- **🌐 SSR & WASM Hydration:** Fast server-side rendering on the initial page load with seamless client-side WebAssembly hydration.
-- **🗄️ Built-in ORM:** Fluent, type-safe query builder (`orm.Query[T]().Where(...)`), auto-timestamps, soft-deletes, and migrations for PostgreSQL, MySQL, and SQLite.
 - **🔒 Authentication & RBAC:** Zero-dependency JWT, session management, and Role-Based Access Control middleware.
 - **🔌 WebSockets:** Hub pattern, typed event routing (`hub.On("event")`), and room management.
 - **📦 Global State Store:** Reactive global store (`store.New()`) for WASM client state synchronization.
@@ -259,6 +263,126 @@ func RegisterRoutes(r *router.Router) {
 }
 ```
 
+### 3. `goks ui` Component System (shadcn/ui for GoKS)
+
+Quickly scaffold beautiful, accessible, production-ready Tailwind UI components directly in `.gox`:
+
+```bash
+# List available components: button, input, card, dialog, badge, dropdown, table
+goks ui list
+
+# Add components to components/ui/
+goks ui add button input card dialog
+
+# Or install all available components at once
+goks ui add all
+```
+
+Use them seamlessly inside your `.gox` pages:
+
+```go
+package page
+
+import "myapp/components/ui"
+
+func (p *MyPage) Render() *component.Node {
+	return <div class="p-8 space-y-4">
+		<ui.Card>
+			<ui.CardHeader>
+				<ui.CardTitle>Welcome back</ui.CardTitle>
+				<ui.CardDescription>Enter your credentials to continue</ui.CardDescription>
+			</ui.CardHeader>
+			<ui.CardContent>
+				<ui.Input placeholder="Email address" type="email" />
+			</ui.CardContent>
+			<ui.CardFooter>
+				<ui.Button variant="primary">Sign In</ui.Button>
+			</ui.CardFooter>
+		</ui.Card>
+	</div>
+}
+```
+
+### 4. Progressive Server Actions (`pkg/action`)
+
+Execute backend Go code directly from HTML forms or client events with automatic zero-JS progressive enhancement:
+
+```go
+package actions
+
+import (
+	"github.com/misbakhul29/goks/pkg/action"
+)
+
+func init() {
+	action.Register("subscribeNewsletter", func(ctx *action.Context) (any, error) {
+		email := ctx.FormData.Get("email")
+		// Save to database...
+		return map[string]string{"message": "Subscribed successfully!"}, nil
+	})
+}
+```
+
+In your `.gox` markup:
+```html
+<form action={action.URL("subscribeNewsletter")} method="POST">
+	<input type="email" name="email" required />
+	<button type="submit">Subscribe</button>
+</form>
+```
+- **WASM Client**: Automatically intercepts submission with `fetch()`, updates state without page reloading.
+- **No-JS / SSR Fallback**: Submits as a regular HTML POST and redirects back cleanly with HTTP 303.
+- **Built-in Security**: Enforces same-origin CSRF verification on all actions.
+
+### 5. Islands Architecture & Selective Hydration
+
+GoKS defaults to zero-WASM pure HTML for static pages, eliminating client runtime overhead:
+
+- **Static Pages**: If a page contains no interactive handlers, GoKS serves **pure HTML** with `0 KB` WASM downloaded.
+- **Interactive Islands**: When interactive events (`onClick`, `onChange`) or components embedding `component.ClientBase` are present, GoKS automatically hydrates the WebAssembly runtime.
+
+```go
+type CounterIsland struct {
+	component.ComponentBase
+	component.ClientBase // Marks this component as an interactive client island
+}
+```
+
+### 6. Ultra-Compact WASM with TinyGo (`--compiler=tinygo`)
+
+For production deployments where bundle size matters, compile with TinyGo to reduce WASM payload from ~2.5 MB down to **< 300 KB**:
+
+```bash
+# Development with TinyGo
+goks dev --compiler=tinygo
+
+# Production build with TinyGo
+goks build --compiler=tinygo
+
+# Standalone single-binary with embedded TinyGo WASM
+goks build --compiler=tinygo --standalone
+```
+
+### 7. Zero-Config Embedded SQLite (`pkg/orm`)
+
+Get started instantly without spinning up external database servers:
+
+```go
+import "github.com/misbakhul29/goks/pkg/orm"
+
+func main() {
+	// Automatically initializes SQLite database at app.db
+	db, err := orm.OpenSQLite("app.db")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	// Use standard fluent query builder
+	users, _ := orm.Query[User]().Where("active", "=", true).Find(db)
+}
+```
+
 ---
 
 ## ⌨️ CLI Reference
@@ -266,12 +390,14 @@ func RegisterRoutes(r *router.Router) {
 | Command | Description |
 | :--- | :--- |
 | `goks new <app>` | Create a new GoKS application |
-| `goks dev [-p port]` | Start development server with hot-reload (default: port 3000) |
+| `goks dev [-p port] [--compiler=tinygo]` | Start development server with hot-reload (default: port 3000) |
 | `goks page <route>` | Scaffold a new `.gox` page in `app/<route>/page.gox` |
 | `goks generate page <route>` | Alias to generate a page |
 | `goks generate component <Name>` | Scaffold a reusable component in `app/components/<name>.gox` |
 | `goks generate model <Name>` | Scaffold an ORM model in `models/<name>.go` |
-| `goks build` | Compile WASM bundle, Tailwind CSS, and production server binary |
+| `goks ui list` | List all available UI components |
+| `goks ui add <name... \| all>` | Add styled Tailwind components to `components/ui/` |
+| `goks build [--compiler=tinygo]` | Compile WASM bundle, Tailwind CSS, and production server binary |
 | `goks build --standalone` | Build a **single self-contained binary** with all assets embedded |
 | `goks start [port]` | Run production server (built inside `.goks/build/`) |
 | `goks version` | Display current GoKS version |

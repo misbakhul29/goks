@@ -3,6 +3,7 @@
 package router
 
 import (
+	"strings"
 	"syscall/js"
 )
 
@@ -102,4 +103,39 @@ func InitClientRouter() {
 		return nil
 	}))
 
+	// Intercept form submissions for Progressive Server Actions
+	js.Global().Get("document").Call("addEventListener", "submit", js.FuncOf(func(_ js.Value, args []js.Value) any {
+		if len(args) == 0 {
+			return nil
+		}
+		e := args[0]
+		form := e.Get("target")
+		if form.IsNull() || form.IsUndefined() || form.Get("tagName").String() != "FORM" {
+			return nil
+		}
+
+		actionAttr := form.Get("getAttribute").Call("call", form, "action")
+		if actionAttr.IsNull() || actionAttr.IsUndefined() {
+			return nil
+		}
+		actionURL := actionAttr.String()
+		if strings.HasPrefix(actionURL, "/__goks_action") {
+			e.Call("preventDefault")
+			formData := js.Global().Get("FormData").New(form)
+
+			fetchOpts := js.Global().Get("Object").New()
+			fetchOpts.Set("method", "POST")
+			fetchOpts.Set("body", formData)
+			headers := js.Global().Get("Object").New()
+			headers.Set("X-GoKS-Action", "1")
+			headers.Set("Accept", "application/json")
+			fetchOpts.Set("headers", headers)
+
+			js.Global().Call("fetch", actionURL, fetchOpts).Call("then", js.FuncOf(func(_ js.Value, _ []js.Value) any {
+				CurrentPath.Set(CurrentPath.Get())
+				return nil
+			}))
+		}
+		return nil
+	}))
 }

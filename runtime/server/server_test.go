@@ -40,6 +40,7 @@ func (l *testLayout) Render() *component.Node {
 
 type testPage struct {
 	component.ComponentBase
+	component.ClientBase
 }
 
 func (p *testPage) Metadata() metadata.Metadata {
@@ -97,6 +98,7 @@ func TestRenderDocumentHTML_CustomHead(t *testing.T) {
 		),
 		html.Body(
 			html.Div(component.Text("Hello")),
+			html.Button().Attr("onClick", "handleClick"),
 		).Class("bg-dark"),
 	).Attr("lang", "id")
 
@@ -125,6 +127,36 @@ func TestRenderDocumentHTML_CustomHead(t *testing.T) {
 		if !strings.Contains(docHTML, sub) {
 			t.Errorf("expected HTML to contain %q, but got:\n%s", sub, docHTML)
 		}
+	}
+}
+
+type staticOnlyPage struct {
+	component.ComponentBase
+}
+
+func (p *staticOnlyPage) Render() *component.Node {
+	return html.Div(html.H1(component.Text("Pure Static Page")))
+}
+
+func TestRenderDocumentHTML_ZeroWASMStatic(t *testing.T) {
+	page := &staticOnlyPage{}
+	layout := &testLayout{Children: page}
+
+	rootComponentNode := component.C(layout)
+	meta := metadata.ExtractFromTree(rootComponentNode)
+	renderedNode := component.Expand(rootComponentNode, func() {}, nil)
+
+	docHTML := renderDocumentHTML(renderedNode, meta, "", "")
+
+	// Static pages should NOT contain wasm_exec.js or app.wasm scripts (0-WASM)
+	if strings.Contains(docHTML, "/wasm_exec.js") {
+		t.Errorf("expected 0-WASM pure HTML output without /wasm_exec.js, but got:\n%s", docHTML)
+	}
+	if strings.Contains(docHTML, "app.wasm") {
+		t.Errorf("expected 0-WASM pure HTML output without app.wasm, but got:\n%s", docHTML)
+	}
+	if !strings.Contains(docHTML, "Pure Static Page") {
+		t.Errorf("expected rendered content in static output")
 	}
 }
 
