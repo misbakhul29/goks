@@ -16,6 +16,7 @@ It embraces a "batteries-included" philosophy, combining a React/Next.js-like de
   - `goks dev` — Instant hot-reload server with WASM compilation, Tailwind watcher, and browser compile-error overlay.
   - `goks page` & `goks generate` — Scaffold pages, reusable components, and ORM models.
   - `goks build` & `goks start` — Optimized production builds and server launcher.
+  - `goks build --standalone` — Bundle everything (WASM, CSS, assets) into a **single self-contained binary**. No project source needed at runtime.
 - **📁 File-System Routing:** Next.js App Router style routing inside the `app/` directory (`page.gox`, `layout.gox`).
 - **🌐 SSR & WASM Hydration:** Fast server-side rendering on the initial page load with seamless client-side WebAssembly hydration.
 - **🗄️ Built-in ORM:** Fluent, type-safe query builder (`orm.Query[T]().Where(...)`), auto-timestamps, soft-deletes, and migrations for PostgreSQL, MySQL, and SQLite.
@@ -70,10 +71,22 @@ goks generate component Card
 goks generate model Post
 ```
 
-### 4. Build and run for production
+### 4. Build for production
+
+**Standard build** — outputs server binary + assets:
 ```bash
 goks build
 goks start 3000
+```
+
+**Standalone build** — one binary, run anywhere (like Next.js `output: 'standalone'`):
+```bash
+goks build --standalone
+# Output: .goks/standalone/server
+
+# Run it anywhere:
+./.goks/standalone/server
+PORT=8080 ./.goks/standalone/server
 ```
 
 ---
@@ -259,8 +272,58 @@ func RegisterRoutes(r *router.Router) {
 | `goks generate component <Name>` | Scaffold a reusable component in `app/components/<name>.gox` |
 | `goks generate model <Name>` | Scaffold an ORM model in `models/<name>.go` |
 | `goks build` | Compile WASM bundle, Tailwind CSS, and production server binary |
+| `goks build --standalone` | Build a **single self-contained binary** with all assets embedded |
 | `goks start [port]` | Run production server (built inside `.goks/build/`) |
 | `goks version` | Display current GoKS version |
+
+---
+
+## 🚢 Deployment
+
+### Standard (`goks build`)
+```bash
+goks build
+# Serve from the project directory:
+goks start 3000
+# or with custom PORT:
+PORT=8080 goks start
+```
+
+### Standalone (`goks build --standalone`) ✨
+
+Produces a **single binary** at `.goks/standalone/server` with WASM, CSS, and all static files embedded inside — no project source required at runtime.
+
+```bash
+goks build --standalone
+```
+
+**VPS / Bare metal:**
+```bash
+scp .goks/standalone/server user@host:/opt/myapp/server
+ssh user@host 'chmod +x /opt/myapp/server && PORT=80 /opt/myapp/server'
+```
+
+**Docker (ultra-minimal image):**
+```dockerfile
+FROM scratch
+COPY .goks/standalone/server /server
+EXPOSE 3000
+CMD ["/server"]
+```
+
+**Railway / Render / Fly.io:**
+Just upload `.goks/standalone/server` and set `PORT` as an environment variable. No build step needed on the platform.
+
+**GitHub Actions → Vercel/Server:**
+```yaml
+- name: Build standalone
+  run: |
+    go install github.com/misbakhul29/goks@latest
+    goks build --standalone
+
+- name: Deploy
+  run: scp .goks/standalone/server ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/opt/app/server
+```
 
 ---
 
