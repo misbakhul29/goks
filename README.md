@@ -13,7 +13,7 @@ SQLite, PostgreSQL, MySQL, Server Actions.
 <div align="center">
 
 [![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?style=for-the-badge&logo=go&logoColor=white)](https://golang.org)
-[![Release](https://img.shields.io/badge/release-v0.9.0-6366F1?style=for-the-badge&logo=github)](https://github.com/misbakhul29/goks/releases)
+[![Release](https://img.shields.io/badge/release-v0.10.0-6366F1?style=for-the-badge&logo=github)](https://github.com/misbakhul29/goks/releases)
 [![License](https://img.shields.io/badge/license-MIT-10B981?style=for-the-badge)](LICENSE)
 [![WASM](https://img.shields.io/badge/WebAssembly-Enabled-654FF0?style=for-the-badge&logo=webassembly&logoColor=white)](https://webassembly.org)
 [![Tailwind](https://img.shields.io/badge/Tailwind_CSS-v4-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
@@ -21,7 +21,7 @@ SQLite, PostgreSQL, MySQL, Server Actions.
 **The Modern Fullstack Go Web Framework.**  
 *Backend APIs + WebAssembly Frontend, 100% Type-Safe Go. Zero Node.js or JavaScript Required.*
 
-[Getting Started](#-quick-start) • [Features](#-features) • [Why GoKS?](#-why-goks) • [UI Components](#-goks-ui-component-system) • [Server Actions](#-progressive-server-actions-pkgaction) • [Deployment](#-deployment-guide)
+[Getting Started](#-quick-start) • [Features](#-features) • [Why GoKS?](#-why-goks) • [UI Components](#-goks-ui-component-system) • [API Routes](#-file-based-api-route-handlers) • [Server Actions](#-progressive-server-actions-pkgaction) • [Deployment](#-deployment-guide)
 
 </div>
 
@@ -36,6 +36,7 @@ GoKS bridges the gap between modern React/Next.js developer ergonomics and the l
 | **Language Stack** | **100% Go** (Fullstack) | TypeScript / JS | Go + HTML Attributes | Go (Backend Only) |
 | **Frontend Runtime** | **WebAssembly (Go)** | JS Virtual DOM | Browser Native / DOM swap | None / Raw Templates |
 | **Node.js / npm Required?** | **❌ No (Zero npm)** | ✅ Required | ❌ No | ❌ No |
+| **File-Based API Routes** | **✅ Built-in (`app/api/**/route.go`)** | ✅ Yes | ❌ No | ❌ Manual |
 | **Server Actions** | **✅ Built-in (`pkg/action`)** | ✅ Yes | ⚠️ Partial (HTMX triggers) | ❌ Manual endpoints |
 | **Selective Hydration** | **✅ Islands (0-WASM static)** | ⚠️ Partial (React RSC) | ❌ N/A | ❌ N/A |
 | **Component Generator** | **✅ `goks ui` (shadcn-style)** | ✅ `shadcn/ui` | ❌ None | ❌ None |
@@ -47,6 +48,8 @@ GoKS bridges the gap between modern React/Next.js developer ergonomics and the l
 ## ✨ Features
 
 - **🚀 GOX Syntax (`.gox`):** Declarative, JSX-like markup directly inside Go (`<div><h1>{title}</h1></div>`, `<ui.Button />`). Compiled directly into Go code in an isolated workspace.
+- **🌐 File-Based API Route Handlers (`app/api/**/route.go`):** Next.js App Router style backend API endpoints. Simply export standard HTTP method functions (`GET`, `POST`, `PUT`, `DELETE`, `PATCH`, `OPTIONS`, `HEAD`) with full path parameters (`:id` or `[id]`), query params, JSON body binding, and automatic recovery. API routes are strictly server-side and never bundled into client WASM.
+- **📦 Static Site Generation (SSG, `goks export`):** Pre-render your entire application to static HTML and deploy to Cloudflare Pages, GitHub Pages, Vercel, or AWS S3 with zero server running costs.
 - **🎨 `goks ui` Component System:** Built-in CLI generator inspired by `shadcn/ui`. Add accessible, styled Tailwind components (`button`, `input`, `card`, `dialog`, `badge`, `dropdown`, `table`) right into `components/ui/`.
 - **🏝️ Islands Architecture & Selective Hydration:** Static pages render **100% pure HTML with 0 KB WASM**. WebAssembly hydration is selectively loaded only for pages with client interactivity (`component.ClientBase` or event handlers).
 - **⚡ TinyGo WASM Support (`--compiler=tinygo`):** Compile client WebAssembly bundles down to **< 300 KB** for blazing-fast mobile and edge load times.
@@ -59,6 +62,7 @@ GoKS bridges the gap between modern React/Next.js developer ergonomics and the l
   - `goks dev` — Hot-reloading dev server with WASM compilation, Tailwind watcher, and browser compile-error overlay.
   - `goks ui add` — Add styled components into `components/ui/`.
   - `goks page` & `goks generate` — Scaffold routes, reusable components, and ORM models.
+  - `goks export` — Pre-render full static HTML website for CDN/serverless hosting.
   - `goks build --standalone` — Produce a **single self-contained binary** embedding all assets (WASM, CSS, HTML).
 - **📁 File-System Routing:** Next.js App Router style file-based routing inside `app/` (`page.gox`, `layout.gox`).
 - **🔒 Authentication & RBAC:** Zero-dependency JWT tokens, session management, and Role-Based Access Control middleware.
@@ -241,6 +245,89 @@ goks ui add all
 | `badge` | `components/ui/badge.gox` | Status indicator badges (`default`, `success`, `warning`, `destructive`) |
 | `dropdown` | `components/ui/dropdown.gox` | Dropdown action menu with items and divider elements |
 | `table` | `components/ui/table.gox` | Responsive data table with styled header, alternating rows, and hover highlights |
+
+---
+
+## 🌐 File-Based API Route Handlers
+
+GoKS brings Next.js App Router-style file-based routing to backend APIs. Simply place a `route.go` file inside any folder in `app/` (typically `app/api/**/route.go`) and export standard HTTP method functions:
+
+```go
+// app/api/users/route.go
+package users
+
+import (
+	"github.com/misbakhul29/goks/pkg/router"
+)
+
+type CreateUserRequest struct {
+	Name  string `json:"name"`
+	Email string `json:"email"`
+}
+
+// GET /api/users
+func GET(c *router.Context) error {
+	return c.JSON([]map[string]string{
+		{"id": "1", "name": "Alice"},
+		{"id": "2", "name": "Bob"},
+	})
+}
+
+// POST /api/users
+func POST(c *router.Context) error {
+	var body CreateUserRequest
+	if err := c.Bind(&body); err != nil {
+		return c.Status(400).JSON(map[string]string{"error": "Invalid request body"})
+	}
+	return c.Status(201).JSON(map[string]any{
+		"status": "created",
+		"user":   body,
+	})
+}
+```
+
+### Dynamic & Wildcard URL Parameters
+Create dynamic endpoints using Next.js-style `[id]` or GoKS-native `_id` folder names:
+
+```go
+// app/api/users/[id]/route.go (or app/api/users/_id/route.go)
+package id
+
+import "github.com/misbakhul29/goks/pkg/router"
+
+// GET /api/users/:id
+func GET(c *router.Context) error {
+	userId := c.Param("id")
+	return c.JSON(map[string]string{"user_id": userId})
+}
+
+// DELETE /api/users/:id
+func DELETE(c *router.Context) error {
+	userId := c.Param("id")
+	// orm.Delete(...)
+	return c.Status(204).Text("")
+}
+```
+
+### Wildcard Catch-All Routes
+Catch-all routes using `[...slug]` capture full remaining URL paths:
+
+```go
+// app/api/files/[...path]/route.go
+package path
+
+import "github.com/misbakhul29/goks/pkg/router"
+
+// GET /api/files/*path (e.g., /api/files/docs/2026/report.pdf)
+func GET(c *router.Context) error {
+	filePath := c.Param("path") // "docs/2026/report.pdf"
+	return c.JSON(map[string]string{"requested_file": filePath})
+}
+```
+
+- **Supported HTTP Methods**: `GET`, `POST`, `PUT`, `DELETE`, `PATCH`, `HEAD`, `OPTIONS`.
+- **Zero WASM Leakage**: API route handlers are compiled strictly into the Go backend server binary and are **never bundled into client WebAssembly** or downloaded by the browser.
+- **Built-in Resilience**: Protected by `router.Recover()` to ensure handler panics return HTTP 500 without crashing your server.
 
 ---
 

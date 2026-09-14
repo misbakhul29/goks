@@ -3,15 +3,17 @@ package router
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 )
 
 // Context wraps http.ResponseWriter and *http.Request with a rich API.
 type Context struct {
-	w      http.ResponseWriter
-	r      *http.Request
-	params map[string]string
-	status int
+	w       http.ResponseWriter
+	r       *http.Request
+	params  map[string]string
+	status  int
+	written bool
 }
 
 func newContext(w http.ResponseWriter, r *http.Request, params map[string]string) *Context {
@@ -46,6 +48,20 @@ func (c *Context) Status(code int) *Context {
 	return c
 }
 
+// WriteHeader sends an HTTP response header with the provided status code.
+func (c *Context) WriteHeader(code int) {
+	if !c.written {
+		c.status = code
+		c.w.WriteHeader(code)
+		c.written = true
+	}
+}
+
+// IsWritten reports whether response headers have already been sent.
+func (c *Context) IsWritten() bool {
+	return c.written
+}
+
 // Request returns the underlying *http.Request.
 func (c *Context) Request() *http.Request {
 	return c.r
@@ -65,14 +81,20 @@ func (c *Context) Response() http.ResponseWriter {
 // JSON writes a JSON response.
 func (c *Context) JSON(data any) error {
 	c.w.Header().Set("Content-Type", "application/json")
-	c.w.WriteHeader(c.status)
+	if !c.written {
+		c.w.WriteHeader(c.status)
+		c.written = true
+	}
 	return json.NewEncoder(c.w).Encode(data)
 }
 
 // Text writes a plain-text response.
 func (c *Context) Text(text string) error {
 	c.w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	c.w.WriteHeader(c.status)
+	if !c.written {
+		c.w.WriteHeader(c.status)
+		c.written = true
+	}
 	_, err := c.w.Write([]byte(text))
 	return err
 }
@@ -80,7 +102,10 @@ func (c *Context) Text(text string) error {
 // HTML writes an HTML response.
 func (c *Context) HTML(html string) error {
 	c.w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	c.w.WriteHeader(c.status)
+	if !c.written {
+		c.w.WriteHeader(c.status)
+		c.written = true
+	}
 	_, err := c.w.Write([]byte(html))
 	return err
 }
@@ -91,12 +116,16 @@ func (c *Context) Redirect(url string, code ...int) error {
 	if len(code) > 0 {
 		statusCode = code[0]
 	}
+	c.written = true
 	http.Redirect(c.w, c.r, url, statusCode)
 	return nil
 }
 
 // Bind decodes a JSON request body into v.
 func (c *Context) Bind(v any) error {
+	if c.r.Body == nil {
+		return io.EOF
+	}
 	defer c.r.Body.Close()
 	return json.NewDecoder(c.r.Body).Decode(v)
 }

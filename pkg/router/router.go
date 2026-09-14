@@ -105,7 +105,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		h = r.middlewares[i](h)
 	}
 
-	if err := h(ctx); err != nil {
+	if err := h(ctx); err != nil && !ctx.IsWritten() {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }

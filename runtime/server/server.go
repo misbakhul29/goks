@@ -58,10 +58,11 @@ type Config struct {
 
 // DevServer is the GoKS development server with hot reload.
 type DevServer struct {
-	cfg    Config
-	router *router.Router
-	lr     *livereload.Server
-	wasm   string // path to compiled app.wasm
+	cfg        Config
+	router     *router.Router
+	lr         *livereload.Server
+	wasm       string // path to compiled app.wasm
+	routesOnce sync.Once
 }
 
 // NewDev creates a new development server.
@@ -87,6 +88,11 @@ func NewDev(cfg Config) *DevServer {
 		router: r,
 		lr:     livereload.New(),
 	}
+}
+
+// Router returns the underlying HTTP router instance.
+func (s *DevServer) Router() *router.Router {
+	return s.router
 }
 
 // Start launches the dev server with file watching and live reload.
@@ -123,8 +129,12 @@ func (s *DevServer) Start() error {
 	return srv.ListenAndServe()
 }
 
-// setupRoutes wires up all built-in and user routes.
+// setupRoutes wires up all built-in and user routes idempotently.
 func (s *DevServer) setupRoutes() {
+	s.routesOnce.Do(s.initRoutes)
+}
+
+func (s *DevServer) initRoutes() {
 	// Live reload WebSocket endpoint
 	if s.cfg.DevMode {
 		s.router.GET("/__goks_livereload", func(ctx *router.Context) error {
