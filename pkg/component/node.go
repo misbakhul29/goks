@@ -80,7 +80,7 @@ func Fragment(children ...*Node) *Node {
 }
 
 // Any dynamically wraps any value into a Node.
-// It handles strings, primitives, Nodes, and Renderables.
+// It handles strings, primitives, Nodes, Renderables, and slices.
 func Any(v any) *Node {
 	switch val := v.(type) {
 	case nil:
@@ -91,6 +91,36 @@ func Any(v any) *Node {
 		return Text(val)
 	case Renderable:
 		return C(val)
+	case []*Node:
+		nodes := make([]*Node, 0, len(val))
+		for _, n := range val {
+			if n != nil {
+				nodes = append(nodes, n)
+			}
+		}
+		return Fragment(nodes...)
+	case []Renderable:
+		nodes := make([]*Node, 0, len(val))
+		for _, r := range val {
+			if r != nil {
+				nodes = append(nodes, C(r))
+			}
+		}
+		return Fragment(nodes...)
+	case []any:
+		nodes := make([]*Node, 0, len(val))
+		for _, item := range val {
+			if n := Any(item); n != nil {
+				nodes = append(nodes, n)
+			}
+		}
+		return Fragment(nodes...)
+	case []string:
+		nodes := make([]*Node, 0, len(val))
+		for _, s := range val {
+			nodes = append(nodes, Text(s))
+		}
+		return Fragment(nodes...)
 	default:
 		return Text(fmt.Sprintf("%v", val))
 	}

@@ -20,7 +20,11 @@ func Element(tag string, children ...any) *component.Node {
 			n.Children = append(n.Children, component.Text(v))
 		case *component.Node:
 			if v != nil {
-				n.Children = append(n.Children, v)
+				if v.Type == component.NodeTypeFragment {
+					n.Children = append(n.Children, v.Children...)
+				} else {
+					n.Children = append(n.Children, v)
+				}
 			}
 		case component.Renderable:
 			if v != nil {

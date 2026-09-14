@@ -168,6 +168,30 @@ func TestAny(t *testing.T) {
 	if component.Any(nil) != nil {
 		t.Fatalf("expected Any(nil) to return nil")
 	}
+
+	// Slice of *Node
+	nodes := []*component.Node{
+		component.H("p", nil, component.Text("one")),
+		component.H("p", nil, component.Text("two")),
+	}
+	frag := component.Any(nodes)
+	if frag.Type != component.NodeTypeFragment || len(frag.Children) != 2 {
+		t.Fatalf("expected Any([]*Node) to return Fragment with 2 children, got %+v", frag)
+	}
+
+	// Slice of string
+	strSlice := []string{"apple", "banana"}
+	strFrag := component.Any(strSlice)
+	if strFrag.Type != component.NodeTypeFragment || len(strFrag.Children) != 2 {
+		t.Fatalf("expected Any([]string) to return Fragment with 2 children, got %+v", strFrag)
+	}
+
+	// Slice of any
+	anySlice := []any{"hello", component.H("span", nil)}
+	anyFrag := component.Any(anySlice)
+	if anyFrag.Type != component.NodeTypeFragment || len(anyFrag.Children) != 2 {
+		t.Fatalf("expected Any([]any) to return Fragment with 2 children, got %+v", anyFrag)
+	}
 }
 
 func TestRenderToString_EscapesTextAndAttrs(t *testing.T) {
