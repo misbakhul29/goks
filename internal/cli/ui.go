@@ -97,6 +97,7 @@ var componentDescriptions = map[string]string{
 	"badge":    "Status badge with default, success, warning, and destructive variants",
 	"dropdown": "Dropdown action menu with styled items and dividers",
 	"table":    "Modern data table with styled header, rows, and responsive borders",
+	"image":    "Optimized responsive image component with layout shift protection and on-demand resizing",
 }
 
 var uiTemplates = map[string]string{
@@ -423,6 +424,44 @@ func (r *TableRow) Render() *component.Node {
 			{r.Children}
 		</tr>
 	)
+}
+`,
+	"image": `package ui
+
+import (
+	"github.com/misbakhul29/goks/pkg/component"
+	"github.com/misbakhul29/goks/pkg/image"
+)
+
+type ImageProps struct {
+	Src      string
+	Alt      string
+	Width    int
+	Height   int
+	Quality  int
+	Priority bool
+	Class    string
+	Sizes    string
+	Style    string
+}
+
+type Image struct {
+	component.ComponentBase
+	Props ImageProps
+}
+
+func (img *Image) Render() *component.Node {
+	return image.New(image.Props{
+		Src:      img.Props.Src,
+		Alt:      img.Props.Alt,
+		Width:    img.Props.Width,
+		Height:   img.Props.Height,
+		Quality:  img.Props.Quality,
+		Priority: img.Props.Priority,
+		Class:    img.Props.Class,
+		Sizes:    img.Props.Sizes,
+		Style:    img.Props.Style,
+	}).Render()
 }
 `,
 }

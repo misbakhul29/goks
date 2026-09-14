@@ -33,10 +33,10 @@ var upgrader = websocket.Upgrader{
 
 // Client represents a connected WebSocket client.
 type Client struct {
-	conn     *websocket.Conn
-	send     chan []byte
-	hub      *Hub
-	ID       string
+	conn      *websocket.Conn
+	send      chan []byte
+	hub       *Hub
+	ID        string
 	closeOnce sync.Once // ensures send channel is closed exactly once
 }
 

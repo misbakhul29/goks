@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -20,6 +21,18 @@ func Register(name string, fn any) {
 	registryMu.Lock()
 	defer registryMu.Unlock()
 	registry[name] = fn
+}
+
+// RegisteredMethods returns a sorted list of all registered RPC method names.
+func RegisteredMethods() []string {
+	registryMu.RLock()
+	defer registryMu.RUnlock()
+	methods := make([]string, 0, len(registry))
+	for m := range registry {
+		methods = append(methods, m)
+	}
+	sort.Strings(methods)
+	return methods
 }
 
 // Handler returns an HTTP handler that processes RPC requests.

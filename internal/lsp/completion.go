@@ -357,10 +357,10 @@ func getImportCompletions() []CompletionItem {
 	var items []CompletionItem
 	for _, pkg := range goksPackages {
 		items = append(items, CompletionItem{
-			Label:            fmt.Sprintf("%q", pkg.ImportPath),
-			Kind:             CompletionKindModule,
-			Detail:           fmt.Sprintf("package %s — %s", pkg.Name, pkg.Description),
-			Documentation:    MarkupContent{
+			Label:  fmt.Sprintf("%q", pkg.ImportPath),
+			Kind:   CompletionKindModule,
+			Detail: fmt.Sprintf("package %s — %s", pkg.Name, pkg.Description),
+			Documentation: MarkupContent{
 				Kind:  "markdown",
 				Value: fmt.Sprintf("### `%s`\n\n%s\n\n```go\nimport %q\n```", pkg.ImportPath, pkg.Description, pkg.ImportPath),
 			},
@@ -379,16 +379,16 @@ func getPackageMemberCompletions(content, pkgName string) []CompletionItem {
 			autoImport := computeAutoImportEdit(content, pkg.ImportPath)
 			for _, m := range pkg.Members {
 				items = append(items, CompletionItem{
-					Label:            m.Name,
-					Kind:             m.Kind,
-					Detail:           fmt.Sprintf("%s (%s)", m.Detail, pkg.ImportPath),
-					Documentation:    MarkupContent{
+					Label:  m.Name,
+					Kind:   m.Kind,
+					Detail: fmt.Sprintf("%s (%s)", m.Detail, pkg.ImportPath),
+					Documentation: MarkupContent{
 						Kind:  "markdown",
 						Value: fmt.Sprintf("### `%s.%s`\n`%s`\n\n%s\n\n```go\nimport %q\n```", pkg.Name, m.Name, m.Detail, m.Doc, pkg.ImportPath),
 					},
-					InsertText:       m.InsertText,
-					InsertTextFormat: InsertFormatSnippet,
-					SortText:         "00_" + m.Name,
+					InsertText:          m.InsertText,
+					InsertTextFormat:    InsertFormatSnippet,
+					SortText:            "00_" + m.Name,
 					AdditionalTextEdits: autoImport,
 				})
 			}
@@ -414,16 +414,16 @@ func getGoSymbolCompletions(content, prefix string) []CompletionItem {
 		if matchPkg {
 			// Suggest package name
 			items = append(items, CompletionItem{
-				Label:            pkg.Name,
-				Kind:             CompletionKindModule,
-				Detail:           fmt.Sprintf("import %q", pkg.ImportPath),
-				Documentation:    MarkupContent{
+				Label:  pkg.Name,
+				Kind:   CompletionKindModule,
+				Detail: fmt.Sprintf("import %q", pkg.ImportPath),
+				Documentation: MarkupContent{
 					Kind:  "markdown",
 					Value: fmt.Sprintf("### Package `%s`\n\n%s\n\n```go\nimport %q\n```", pkg.Name, pkg.Description, pkg.ImportPath),
 				},
-				InsertText:       pkg.Name,
-				InsertTextFormat: InsertFormatPlainText,
-				SortText:         "00_" + pkg.Name,
+				InsertText:          pkg.Name,
+				InsertTextFormat:    InsertFormatPlainText,
+				SortText:            "00_" + pkg.Name,
 				AdditionalTextEdits: autoImport,
 			})
 		}
@@ -441,16 +441,16 @@ func getGoSymbolCompletions(content, prefix string) []CompletionItem {
 
 			if matchMember {
 				items = append(items, CompletionItem{
-					Label:            fullLabel,
-					Kind:             member.Kind,
-					Detail:           fmt.Sprintf("%s (%s)", member.Detail, pkg.ImportPath),
-					Documentation:    MarkupContent{
+					Label:  fullLabel,
+					Kind:   member.Kind,
+					Detail: fmt.Sprintf("%s (%s)", member.Detail, pkg.ImportPath),
+					Documentation: MarkupContent{
 						Kind:  "markdown",
 						Value: fmt.Sprintf("### `%s`\n`%s`\n\n%s\n\n```go\nimport %q\n```", fullLabel, member.Detail, member.Doc, pkg.ImportPath),
 					},
-					InsertText:       pkg.Name + "." + member.InsertText,
-					InsertTextFormat: InsertFormatSnippet,
-					SortText:         "01_" + pkg.Name + "_" + cleanName,
+					InsertText:          pkg.Name + "." + member.InsertText,
+					InsertTextFormat:    InsertFormatSnippet,
+					SortText:            "01_" + pkg.Name + "_" + cleanName,
 					AdditionalTextEdits: autoImport,
 				})
 			}

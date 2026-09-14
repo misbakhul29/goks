@@ -3,8 +3,8 @@ package cli
 import (
 	"os"
 
-	"github.com/spf13/cobra"
 	"github.com/misbakhul29/goks/internal/lsp"
+	"github.com/spf13/cobra"
 )
 
 // LSPCmd starts the Language Server Protocol server for GOX files.

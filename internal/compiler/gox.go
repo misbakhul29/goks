@@ -44,7 +44,7 @@ func PrepareWorkspace(appDir string) error {
 			return nil
 		}
 
-		destPath := filepath.Join(workspaceDir, rel)
+		destPath := filepath.Join(workspaceDir, NormalizeWorkspaceRel(rel))
 
 		if info.IsDir() {
 			return os.MkdirAll(destPath, 0755)
@@ -203,7 +203,7 @@ func extractAttrExprs(xmlStr string) (string, map[string]string) {
 	for i < len(xmlStr) {
 		if i+1 < len(xmlStr) && xmlStr[i] == '=' && xmlStr[i+1] == '{' {
 			result.WriteByte('=') // keep the '='
-			i++                  // skip '='
+			i++                   // skip '='
 
 			// Collect balanced {…} expression (handles nesting and strings)
 			depth := 0
@@ -390,4 +390,19 @@ func formatGoNode(tag string, attrs []xml.Attr, inner string, placeholders map[s
 	}
 
 	return res
+}
+
+// NormalizeWorkspaceRel normalizes path segments for the .goks/workspace directory.
+// Bracketed folder segments such as "[id]" and "[...slug]" are normalized to "_id" and "_slug"
+// so that Go's compiler does not reject them as invalid import paths.
+func NormalizeWorkspaceRel(rel string) string {
+	parts := strings.Split(rel, string(filepath.Separator))
+	for i, p := range parts {
+		if strings.HasPrefix(p, "[...") && strings.HasSuffix(p, "]") {
+			parts[i] = "_" + strings.TrimSuffix(strings.TrimPrefix(p, "[..."), "]")
+		} else if strings.HasPrefix(p, "[") && strings.HasSuffix(p, "]") {
+			parts[i] = "_" + strings.TrimSuffix(strings.TrimPrefix(p, "["), "]")
+		}
+	}
+	return filepath.Join(parts...)
 }

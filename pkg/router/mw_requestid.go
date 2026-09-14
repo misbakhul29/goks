@@ -23,7 +23,7 @@ func RequestID() MiddlewareFunc {
 				ctx.Request().Header.Set("X-Request-Id", reqID)
 			}
 			ctx.SetHeader("X-Request-Id", reqID)
-			
+
 			return next(ctx)
 		}
 	}

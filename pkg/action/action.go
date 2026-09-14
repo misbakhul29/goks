@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -49,6 +50,18 @@ func Register(name string, fn Action) {
 	registryMu.Lock()
 	defer registryMu.Unlock()
 	actions[name] = fn
+}
+
+// RegisteredActions returns a sorted list of all registered Server Action names.
+func RegisteredActions() []string {
+	registryMu.RLock()
+	defer registryMu.RUnlock()
+	list := make([]string, 0, len(actions))
+	for a := range actions {
+		list = append(list, a)
+	}
+	sort.Strings(list)
+	return list
 }
 
 // URL returns the action endpoint URL to be used in HTML <form action="..."> attributes.

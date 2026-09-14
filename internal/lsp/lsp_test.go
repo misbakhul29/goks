@@ -70,7 +70,6 @@ func (l *Layout) Render() *component.Node {
 	}
 }
 
-
 func TestValidateDocument_UnclosedTag(t *testing.T) {
 	unclosedGOX := `package app
 
@@ -222,7 +221,6 @@ func (p *Page) handleClick() {
 	}
 }
 
-
 func TestGetHover(t *testing.T) {
 	content := `package app
 func (l *Layout) Render() *component.Node {
@@ -261,7 +259,6 @@ func (p *Page) handleClick() {
 		t.Errorf("expected hover value to contain router import path, got %s", hoverPkg.Contents.Value)
 	}
 }
-
 
 func TestServer_Initialize(t *testing.T) {
 	server := NewServer()

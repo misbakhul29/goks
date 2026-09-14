@@ -3,12 +3,17 @@ package generator
 import (
 	"bytes"
 	"fmt"
+	"go/ast"
 	"go/format"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
-	"runtime/debug"
+	"regexp"
 	"strings"
 	"text/template"
+
+	"github.com/misbakhul29/goks/internal/version"
 )
 
 type RouteNode struct {
@@ -21,6 +26,141 @@ type RouteNode struct {
 	Children    []*RouteNode
 }
 
+// APIRoute describes a file-based API route discovered in the app directory.
+type APIRoute struct {
+	Path       string   // e.g. "/api/users/:id"
+	PkgAlias   string   // e.g. "api_users_id"
+	ImportPath string   // e.g. "module/app/api/users/_id"
+	Methods    []string // e.g. ["GET", "POST", "DELETE"]
+}
+
+var validHTTPMethods = map[string]bool{
+	"GET":     true,
+	"POST":    true,
+	"PUT":     true,
+	"DELETE":  true,
+	"PATCH":   true,
+	"HEAD":    true,
+	"OPTIONS": true,
+}
+
+var httpMethodOrder = []string{"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"}
+
+func parseRouteMethods(filePath string) ([]string, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	fset := token.NewFileSet()
+	fileNode, err := parser.ParseFile(fset, filePath, data, parser.ParseComments)
+	found := make(map[string]bool)
+	if err == nil {
+		for _, decl := range fileNode.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Recv != nil {
+				continue
+			}
+			if validHTTPMethods[fn.Name.Name] {
+				found[fn.Name.Name] = true
+			}
+		}
+	} else {
+		// Fallback regex scanner if AST parse encounters non-standard syntax
+		for m := range validHTTPMethods {
+			re := regexp.MustCompile(`(?m)^func\s+` + m + `\s*\(`)
+			if re.Match(data) {
+				found[m] = true
+			}
+		}
+	}
+
+	var methods []string
+	for _, m := range httpMethodOrder {
+		if found[m] {
+			methods = append(methods, m)
+		}
+	}
+	return methods, nil
+}
+
+func cleanRoutePath(rel string) string {
+	if rel == "." || rel == "" {
+		return "/"
+	}
+	parts := strings.Split(filepath.ToSlash(rel), "/")
+	for i, p := range parts {
+		if strings.HasPrefix(p, "[...") && strings.HasSuffix(p, "]") {
+			parts[i] = "*" + strings.TrimSuffix(strings.TrimPrefix(p, "[..."), "]")
+		} else if strings.HasPrefix(p, "[") && strings.HasSuffix(p, "]") {
+			parts[i] = ":" + strings.TrimSuffix(strings.TrimPrefix(p, "["), "]")
+		} else if strings.HasPrefix(p, "_") {
+			parts[i] = ":" + p[1:]
+		}
+	}
+	res := "/" + strings.Join(parts, "/")
+	for strings.Contains(res, "//") {
+		res = strings.ReplaceAll(res, "//", "/")
+	}
+	return res
+}
+
+func normalizeImportRel(rel string) string {
+	if rel == "." || rel == "" {
+		return ""
+	}
+	parts := strings.Split(filepath.ToSlash(rel), "/")
+	for i, p := range parts {
+		if strings.HasPrefix(p, "[...") && strings.HasSuffix(p, "]") {
+			parts[i] = "_" + strings.TrimSuffix(strings.TrimPrefix(p, "[..."), "]")
+		} else if strings.HasPrefix(p, "[") && strings.HasSuffix(p, "]") {
+			parts[i] = "_" + strings.TrimSuffix(strings.TrimPrefix(p, "["), "]")
+		}
+	}
+	return strings.Join(parts, "/")
+}
+
+func sanitizeIdentifier(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
+			b.WriteRune(r)
+		} else {
+			b.WriteRune('_')
+		}
+	}
+	res := b.String()
+	for strings.Contains(res, "__") {
+		res = strings.ReplaceAll(res, "__", "_")
+	}
+	return strings.Trim(res, "_")
+}
+
+func sanitizePkgAlias(rel string, aliasCounts map[string]int) string {
+	if rel == "." || rel == "" {
+		return "api_root"
+	}
+	clean := sanitizeIdentifier(rel)
+	if !strings.HasPrefix(clean, "api_") {
+		clean = "api_" + clean
+	}
+	if count, exists := aliasCounts[clean]; exists {
+		aliasCounts[clean] = count + 1
+		return fmt.Sprintf("%s_%d", clean, count+1)
+	}
+	aliasCounts[clean] = 1
+	return clean
+}
+
+func findRouteFile(dir string) string {
+	for _, name := range []string{"route.go", "route.gox"} {
+		p := filepath.Join(dir, name)
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return ""
+}
 
 // GetModuleName extracts the module name from go.mod
 func GetModuleName(appDir string) (string, error) {
@@ -64,6 +204,9 @@ func generateRouterInternal(appDir string, isProd bool, standalone bool) error {
 		ImportPath: "",    // no import needed for root
 	}
 
+	var apiRoutes []APIRoute
+	aliasCounts := make(map[string]int)
+
 	err = filepath.Walk(appRoot, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -80,22 +223,23 @@ func generateRouterInternal(appDir string, isProd bool, standalone bool) error {
 
 		if rel == "." {
 			checkFiles(path, rootNode)
+			if routeFile := findRouteFile(path); routeFile != "" {
+				if methods, err := parseRouteMethods(routeFile); err == nil && len(methods) > 0 {
+					apiRoutes = append(apiRoutes, APIRoute{
+						Path:       "/",
+						PkgAlias:   sanitizePkgAlias(".", aliasCounts),
+						ImportPath: moduleName + "/app",
+						Methods:    methods,
+					})
+				}
+			}
 			return nil
 		}
 
-		routePath := "/" + strings.ReplaceAll(rel, string(filepath.Separator), "/")
-		// Convert _slug to :slug for dynamic routes
-		parts := strings.Split(routePath, "/")
-		for i, p := range parts {
-			if strings.HasPrefix(p, "_") {
-				parts[i] = ":" + p[1:]
-			}
-		}
-		routePath = strings.Join(parts, "/")
-
-		// Calculate package alias
-		pkgAlias := "pkg_" + strings.ReplaceAll(rel, string(filepath.Separator), "_")
-		importPath := moduleName + "/app/" + filepath.ToSlash(rel)
+		routePath := cleanRoutePath(rel)
+		normalizedRel := normalizeImportRel(rel)
+		pkgAlias := "pkg_" + sanitizeIdentifier(rel)
+		importPath := moduleName + "/app/" + normalizedRel
 
 		node := &RouteNode{
 			Path:       routePath,
@@ -106,6 +250,17 @@ func generateRouterInternal(appDir string, isProd bool, standalone bool) error {
 
 		if node.HasPage || node.HasLayout {
 			insertNode(rootNode, node)
+		}
+
+		if routeFile := findRouteFile(path); routeFile != "" {
+			if methods, err := parseRouteMethods(routeFile); err == nil && len(methods) > 0 {
+				apiRoutes = append(apiRoutes, APIRoute{
+					Path:       routePath,
+					PkgAlias:   sanitizePkgAlias(rel, aliasCounts),
+					ImportPath: importPath,
+					Methods:    methods,
+				})
+			}
 		}
 
 		return nil
@@ -129,11 +284,11 @@ func generateRouterInternal(appDir string, isProd bool, standalone bool) error {
 	}
 
 	if standalone {
-		if err := writeStandaloneServerMain(entryDir, appDir, moduleName); err != nil {
+		if err := writeStandaloneServerMain(entryDir, appDir, moduleName, apiRoutes); err != nil {
 			return err
 		}
 	} else {
-		if err := writeServerMain(entryDir, appDir, moduleName, isProd); err != nil {
+		if err := writeServerMain(entryDir, appDir, moduleName, isProd, apiRoutes); err != nil {
 			return err
 		}
 	}
@@ -146,12 +301,7 @@ func generateRouterInternal(appDir string, isProd bool, standalone bool) error {
 }
 
 func getGoKSVersion() string {
-	if info, ok := debug.ReadBuildInfo(); ok {
-		if info.Main.Version != "" && info.Main.Version != "(devel)" {
-			return info.Main.Version
-		}
-	}
-	return "v0.8.2"
+	return version.Current()
 }
 
 func writeEntryGoMod(entryDir, appDir, moduleName string) error {
@@ -164,7 +314,7 @@ require github.com/misbakhul29/goks %s
 
 replace %s => ../workspace
 `, moduleName, getGoKSVersion(), moduleName)
-	
+
 	// If the user's go.mod has a replace for goks, we should copy it
 	if b, err := os.ReadFile(filepath.Join(appDir, "go.mod")); err == nil {
 		lines := strings.Split(string(b), "\n")
@@ -261,6 +411,10 @@ func (r *AppRouter) HasMatchedPage(path string) bool {
 	return router.MatchAnyRoute(registeredPageRoutes, path)
 }
 
+func (r *AppRouter) PageRoutes() []string {
+	return registeredPageRoutes
+}
+
 func (r *AppRouter) Render() *component.Node {
 	current := router.CurrentPath.Get()
 	var children *component.Node
@@ -326,7 +480,6 @@ func writeRouterFile(entryDir string, rootNode *RouteNode, moduleName string) er
 	if err := tmpl.Execute(&buf, data); err != nil {
 		return err
 	}
-
 
 	var gettersBuf strings.Builder
 	generateGetters(rootNode, &gettersBuf)
@@ -469,13 +622,28 @@ func main() {
 	return os.WriteFile(filepath.Join(entryDir, "client_main.go"), []byte(content), 0644)
 }
 
-func writeServerMain(entryDir, appDir, moduleName string, isProd bool) error {
+func buildAPIRouteCode(apiRoutes []APIRoute) (string, string) {
+	var importsB strings.Builder
+	var regB strings.Builder
+	for _, route := range apiRoutes {
+		importsB.WriteString(fmt.Sprintf("\n\t%s \"%s\"", route.PkgAlias, route.ImportPath))
+		for _, method := range route.Methods {
+			regB.WriteString(fmt.Sprintf("\n\tsrv.Router().Handle(\"%s\", \"%s\", %s.%s)",
+				method, route.Path, route.PkgAlias, method))
+		}
+	}
+	return importsB.String(), regB.String()
+}
+
+func writeServerMain(entryDir, appDir, moduleName string, isProd bool, apiRoutes []APIRoute) error {
 	hasConfig := false
 	if b, err := os.ReadFile(filepath.Join(appDir, "config", "goks.config.go")); err == nil {
 		if strings.Contains(string(b), "func ServerConfig") {
 			hasConfig = true
 		}
 	}
+
+	apiImports, apiRegistrations := buildAPIRouteCode(apiRoutes)
 
 	imports := `	"log"
 	"os"
@@ -484,6 +652,7 @@ func writeServerMain(entryDir, appDir, moduleName string, isProd bool) error {
 	if hasConfig {
 		imports += fmt.Sprintf("\n\t\"%s/config\"", moduleName)
 	}
+	imports += apiImports
 
 	appDirStr := `"../.."`
 	devModeStr := `true`
@@ -540,21 +709,30 @@ import (
 
 func main() {
 %s
-	srv := server.NewDev(cfg)
+	srv := server.NewDev(cfg)%s
+	if exportDir := os.Getenv("GOKS_EXPORT_DIR"); exportDir != "" {
+		if err := srv.ExportStatic(exportDir); err != nil {
+			log.Fatalf("[GoKS] Static export failed: %%v", err)
+		}
+		return
+	}
 	log.Fatal(srv.Start())
 }
-`, imports, configInit)
+`, imports, configInit, apiRegistrations)
 	return os.WriteFile(filepath.Join(entryDir, "server_main.go"), []byte(content), 0644)
 }
+
 // writeStandaloneServerMain generates server_main.go with //go:embed directives
 // for all assets (WASM, CSS, wasm_exec.js, public/) so the binary is self-contained.
-func writeStandaloneServerMain(entryDir, appDir, moduleName string) error {
+func writeStandaloneServerMain(entryDir, appDir, moduleName string, apiRoutes []APIRoute) error {
 	hasConfig := false
 	if b, err := os.ReadFile(filepath.Join(appDir, "config", "goks.config.go")); err == nil {
 		if strings.Contains(string(b), "func ServerConfig") {
 			hasConfig = true
 		}
 	}
+
+	apiImports, apiRegistrations := buildAPIRouteCode(apiRoutes)
 
 	// Check if public/ directory exists so we only embed it when present
 	hasPublic := false
@@ -572,6 +750,7 @@ func writeStandaloneServerMain(entryDir, appDir, moduleName string) error {
 	if hasConfig {
 		importsB.WriteString(fmt.Sprintf("\n\t\"%s/config\"", moduleName))
 	}
+	importsB.WriteString(apiImports)
 
 	// Build embed directives
 	var embedB strings.Builder
@@ -634,10 +813,10 @@ import (
 %s
 func main() {
 %s
-	srv := server.NewDev(cfg)
+	srv := server.NewDev(cfg)%s
 	log.Fatal(srv.Start())
 }
-`, importsB.String(), embedB.String(), configB.String())
+`, importsB.String(), embedB.String(), configB.String(), apiRegistrations)
 
 	return os.WriteFile(filepath.Join(entryDir, "server_main.go"), []byte(content), 0644)
 }

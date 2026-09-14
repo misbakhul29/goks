@@ -4,12 +4,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime/debug"
 	"strings"
 	"text/template"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+
+	"github.com/misbakhul29/goks/internal/version"
 )
 
 // NewCmd returns the `goks new` subcommand.
@@ -62,13 +63,13 @@ func scaffoldApp(name string) error {
 		"models/user.go":            tmplExampleModel,
 		"services/user_service.go":  tmplExampleService,
 		"repositories/user_repo.go": tmplExampleRepository,
-		"api/routes.go":            tmplExampleAPI,
-		"config/goks.config.go":    tmplConfig,
-		"middleware/logger.go":     tmplMiddleware,
-		".gitignore":               tmplGitignore,
-		"README.md":                tmplReadme,
-		"public/global.css":        tmplGlobalCss,
-		"public/favicon.ico":       "", // empty placeholder
+		"api/routes.go":             tmplExampleAPI,
+		"config/goks.config.go":     tmplConfig,
+		"middleware/logger.go":      tmplMiddleware,
+		".gitignore":                tmplGitignore,
+		"README.md":                 tmplReadme,
+		"public/global.css":         tmplGlobalCss,
+		"public/favicon.ico":        "", // empty placeholder
 	}
 
 	for relPath, tmplStr := range files {
@@ -113,10 +114,5 @@ func renderTemplate(dst, name, tmplStr string, data any) error {
 }
 
 func getGoKSVersion() string {
-	if info, ok := debug.ReadBuildInfo(); ok {
-		if info.Main.Version != "" && info.Main.Version != "(devel)" {
-			return info.Main.Version
-		}
-	}
-	return "v0.1.0"
+	return version.Current()
 }

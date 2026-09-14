@@ -114,7 +114,7 @@ func DevCmd() *cobra.Command {
 					childCmd.Process.Kill()
 					childCmd.Wait()
 				}
-				
+
 				buildErrorMutex.RLock()
 				hasErr := buildError != ""
 				buildErrorMutex.RUnlock()
@@ -136,7 +136,7 @@ func DevCmd() *cobra.Command {
 				fmt.Printf("\n%s %s\n", color.YellowString("↻ Change detected:"), ev.Path)
 				start = time.Now()
 				out, err := compileWasmAndServer(appDir, compilerType)
-				
+
 				buildErrorMutex.Lock()
 				if err != nil {
 					buildError = string(out)
@@ -147,7 +147,7 @@ func DevCmd() *cobra.Command {
 					fmt.Printf("%s (%v)\n", color.GreenString("  ✅ Recompiled"), time.Since(start).Round(time.Millisecond))
 				}
 				buildErrorMutex.Unlock()
-				
+
 				if err == nil {
 					fmt.Println(color.CyanString("  🚀 Restarting server..."))
 				}
@@ -167,9 +167,10 @@ func DevCmd() *cobra.Command {
 
 			// 5. Start Reverse Proxy
 			fmt.Println(color.CyanString("  🚀 Starting server at http://localhost:%d", port))
+			fmt.Printf("  %s %s\n\n", color.HiBlackString("🛠️  GoKS Studio:  "), color.CyanString("http://localhost:%d/__goks", port))
 			childURL, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", childPort))
 			proxy := httputil.NewSingleHostReverseProxy(childURL)
-			
+
 			http.HandleFunc("/__goks_livereload", lr.Handler())
 			http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 				buildErrorMutex.RLock()
@@ -250,9 +251,9 @@ func compileWasmAndServer(appDir, compilerType string) ([]byte, error) {
 
 	// Generate router logic & go.mod for Development
 	_ = generator.GenerateRouter(appDir, false)
-	
+
 	entryDir := filepath.Join(appDir, ".goks", "entry")
-	
+
 	// Run go mod tidy in entryDir
 	tidyCmd := exec.Command("go", "mod", "tidy")
 	tidyCmd.Dir = entryDir
@@ -263,7 +264,7 @@ func compileWasmAndServer(appDir, compilerType string) ([]byte, error) {
 	// Compile WASM
 	outDir := filepath.Join(appDir, ".goks", "build")
 	os.MkdirAll(outDir, 0755)
-	
+
 	var cmdWasm *exec.Cmd
 	if compilerType == "tinygo" {
 		tinyBin, err := ensureTinyGo()
@@ -280,7 +281,7 @@ func compileWasmAndServer(appDir, compilerType string) ([]byte, error) {
 	if out, err := cmdWasm.CombinedOutput(); err != nil {
 		return out, err
 	}
-	
+
 	// Copy wasm_exec.js for the selected compiler
 	wasmExec, err := locateWasmExec(compilerType)
 	if err != nil {

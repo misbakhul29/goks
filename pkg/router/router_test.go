@@ -203,3 +203,121 @@ func TestUseRouter(t *testing.T) {
 	r.Forward()
 }
 
+func TestRouter_FileBasedAPIRoutes(t *testing.T) {
+	r := router.New()
+	r.Use(router.Recover())
+
+	// Simulate app/api/users/_id/route.go (GET and DELETE)
+	r.GET("/api/users/:id", func(ctx *router.Context) error {
+		id := ctx.Param("id")
+		return ctx.JSON(map[string]string{"id": id, "action": "get"})
+	})
+
+	r.DELETE("/api/users/:id", func(ctx *router.Context) error {
+		_ = ctx.Param("id")
+		return ctx.Status(http.StatusNoContent).Text("")
+	})
+
+	// Simulate app/api/files/*slug/route.go (GET wildcard)
+	r.GET("/api/files/*slug", func(ctx *router.Context) error {
+		slug := ctx.Param("slug")
+		return ctx.JSON(map[string]string{"path": slug})
+	})
+
+	// 1. Test GET /api/users/42
+	req1 := httptest.NewRequest(http.MethodGet, "/api/users/42", nil)
+	w1 := httptest.NewRecorder()
+	r.ServeHTTP(w1, req1)
+	if w1.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w1.Code)
+	}
+	var res1 map[string]string
+	_ = json.NewDecoder(w1.Body).Decode(&res1)
+	if res1["id"] != "42" || res1["action"] != "get" {
+		t.Fatalf("unexpected response: %+v", res1)
+	}
+
+	// 2. Test DELETE /api/users/42
+	req2 := httptest.NewRequest(http.MethodDelete, "/api/users/42", nil)
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d", w2.Code)
+	}
+
+	// 3. Test Wildcard GET /api/files/docs/2026/report.pdf
+	req3 := httptest.NewRequest(http.MethodGet, "/api/files/docs/2026/report.pdf", nil)
+	w3 := httptest.NewRecorder()
+	r.ServeHTTP(w3, req3)
+	if w3.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w3.Code)
+	}
+	var res3 map[string]string
+	_ = json.NewDecoder(w3.Body).Decode(&res3)
+	if res3["path"] != "docs/2026/report.pdf" {
+		t.Fatalf("expected wildcard path 'docs/2026/report.pdf', got %q", res3["path"])
+	}
+}
+
+func TestRouter_BindAndCustomError(t *testing.T) {
+	r := router.New()
+
+	type UserInput struct {
+		Username string `json:"username"`
+	}
+
+	r.POST("/api/users", func(ctx *router.Context) error {
+		var input UserInput
+		if err := ctx.Bind(&input); err != nil {
+			return ctx.Status(http.StatusBadRequest).JSON(map[string]string{"error": "invalid payload"})
+		}
+		if input.Username == "" {
+			return ctx.Status(http.StatusUnprocessableEntity).JSON(map[string]string{"error": "username required"})
+		}
+		return ctx.Status(http.StatusCreated).JSON(map[string]string{"status": "created", "user": input.Username})
+	})
+
+	// Valid POST
+	body := strings.NewReader(`{"username":"goks_user"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/users", body)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201 Created, got %d", w.Code)
+	}
+
+	// Invalid JSON body
+	badReq := httptest.NewRequest(http.MethodPost, "/api/users", strings.NewReader("invalid-json"))
+	wBad := httptest.NewRecorder()
+	r.ServeHTTP(wBad, badReq)
+	if wBad.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 Bad Request, got %d", wBad.Code)
+	}
+
+	// Validation error
+	emptyReq := httptest.NewRequest(http.MethodPost, "/api/users", strings.NewReader(`{"username":""}`))
+	wEmpty := httptest.NewRecorder()
+	r.ServeHTTP(wEmpty, emptyReq)
+	if wEmpty.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 Unprocessable Entity, got %d", wEmpty.Code)
+	}
+}
+
+func TestRouter_PanicRecoveryInHandler(t *testing.T) {
+	r := router.New()
+	r.Use(router.Recover())
+
+	r.GET("/api/panic", func(ctx *router.Context) error {
+		var ptr *string
+		_ = *ptr // deliberate nil pointer dereference
+		return nil
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/panic", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500 Internal Server Error on panic, got %d", w.Code)
+	}
+}

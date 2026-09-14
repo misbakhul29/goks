@@ -105,44 +105,44 @@ func H4(children ...any) *component.Node { return Element("h4", children...) }
 func H5(children ...any) *component.Node { return Element("h5", children...) }
 func H6(children ...any) *component.Node { return Element("h6", children...) }
 
-func Article(children ...any) *component.Node { return Element("article", children...) }
-func Aside(children ...any) *component.Node { return Element("aside", children...) }
-func Figure(children ...any) *component.Node { return Element("figure", children...) }
+func Article(children ...any) *component.Node    { return Element("article", children...) }
+func Aside(children ...any) *component.Node      { return Element("aside", children...) }
+func Figure(children ...any) *component.Node     { return Element("figure", children...) }
 func Figcaption(children ...any) *component.Node { return Element("figcaption", children...) }
 
-func Ol(children ...any) *component.Node { return Element("ol", children...) }
+func Ol(children ...any) *component.Node    { return Element("ol", children...) }
 func Table(children ...any) *component.Node { return Element("table", children...) }
 func Thead(children ...any) *component.Node { return Element("thead", children...) }
 func Tbody(children ...any) *component.Node { return Element("tbody", children...) }
-func Tr(children ...any) *component.Node { return Element("tr", children...) }
-func Th(children ...any) *component.Node { return Element("th", children...) }
-func Td(children ...any) *component.Node { return Element("td", children...) }
+func Tr(children ...any) *component.Node    { return Element("tr", children...) }
+func Th(children ...any) *component.Node    { return Element("th", children...) }
+func Td(children ...any) *component.Node    { return Element("td", children...) }
 
-func I(children ...any) *component.Node { return Element("i", children...) }
-func B(children ...any) *component.Node { return Element("b", children...) }
-func U(children ...any) *component.Node { return Element("u", children...) }
+func I(children ...any) *component.Node  { return Element("i", children...) }
+func B(children ...any) *component.Node  { return Element("b", children...) }
+func U(children ...any) *component.Node  { return Element("u", children...) }
 func Em(children ...any) *component.Node { return Element("em", children...) }
 func Br(children ...any) *component.Node { return Element("br", children...) }
 func Hr(children ...any) *component.Node { return Element("hr", children...) }
 
-func Select(children ...any) *component.Node { return Element("select", children...) }
-func Option(children ...any) *component.Node { return Element("option", children...) }
+func Select(children ...any) *component.Node   { return Element("select", children...) }
+func Option(children ...any) *component.Node   { return Element("option", children...) }
 func Textarea(children ...any) *component.Node { return Element("textarea", children...) }
 
-func Svg(children ...any) *component.Node { return Element("svg", children...) }
-func Path(children ...any) *component.Node { return Element("path", children...) }
-func G(children ...any) *component.Node { return Element("g", children...) }
+func Svg(children ...any) *component.Node    { return Element("svg", children...) }
+func Path(children ...any) *component.Node   { return Element("path", children...) }
+func G(children ...any) *component.Node      { return Element("g", children...) }
 func Circle(children ...any) *component.Node { return Element("circle", children...) }
-func Rect(children ...any) *component.Node { return Element("rect", children...) }
+func Rect(children ...any) *component.Node   { return Element("rect", children...) }
 
 // Document & Metadata Elements
-func Html(children ...any) *component.Node { return Element("html", children...) }
-func Head(children ...any) *component.Node { return Element("head", children...) }
-func Body(children ...any) *component.Node { return Element("body", children...) }
-func Title(children ...any) *component.Node { return Element("title", children...) }
-func Meta(children ...any) *component.Node { return Element("meta", children...) }
-func Link(children ...any) *component.Node { return Element("link", children...) }
-func Script(children ...any) *component.Node { return Element("script", children...) }
-func Style(children ...any) *component.Node { return Element("style", children...) }
+func Html(children ...any) *component.Node     { return Element("html", children...) }
+func Head(children ...any) *component.Node     { return Element("head", children...) }
+func Body(children ...any) *component.Node     { return Element("body", children...) }
+func Title(children ...any) *component.Node    { return Element("title", children...) }
+func Meta(children ...any) *component.Node     { return Element("meta", children...) }
+func Link(children ...any) *component.Node     { return Element("link", children...) }
+func Script(children ...any) *component.Node   { return Element("script", children...) }
+func Style(children ...any) *component.Node    { return Element("style", children...) }
 func Noscript(children ...any) *component.Node { return Element("noscript", children...) }
-func Base(children ...any) *component.Node { return Element("base", children...) }
+func Base(children ...any) *component.Node     { return Element("base", children...) }

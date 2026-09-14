@@ -11,10 +11,10 @@ import (
 type NodeType int
 
 const (
-	NodeTypeElement  NodeType = iota // HTML element, e.g. <div>
-	NodeTypeText                     // Text node
-	NodeTypeFragment                 // Fragment (multiple root nodes)
-	NodeTypeComponent               // A GoKS component node
+	NodeTypeElement   NodeType = iota // HTML element, e.g. <div>
+	NodeTypeText                      // Text node
+	NodeTypeFragment                  // Fragment (multiple root nodes)
+	NodeTypeComponent                 // A GoKS component node
 )
 
 // Props is a map of properties/attributes for a node or component.
@@ -22,13 +22,13 @@ type Props map[string]any
 
 // Node represents a virtual DOM node.
 type Node struct {
-	Type       NodeType
-	Tag        string    // HTML tag name (for NodeTypeElement)
-	Text       string    // Text content (for NodeTypeText)
-	Props      Props     // Attributes, event handlers, etc.
-	Children   []*Node   // Child nodes
-	Key        string    // Optional reconciler key for stable identity
-	Component  Renderable // Set if NodeTypeComponent
+	Type      NodeType
+	Tag       string     // HTML tag name (for NodeTypeElement)
+	Text      string     // Text content (for NodeTypeText)
+	Props     Props      // Attributes, event handlers, etc.
+	Children  []*Node    // Child nodes
+	Key       string     // Optional reconciler key for stable identity
+	Component Renderable // Set if NodeTypeComponent
 }
 
 // Renderable is implemented by anything that can render itself to a Node tree.
@@ -174,7 +174,7 @@ func Expand(n *Node, appRerender func(), currentFiber *FiberNode) *Node {
 		if currentFiber != nil {
 			compType := reflect.TypeOf(n.Component)
 			var funcPtr uintptr
-			
+
 			// Extract function pointer if it's a FuncComponent to differentiate between different functions
 			if compType == reflect.TypeOf(FuncComponent(nil)) {
 				funcPtr = reflect.ValueOf(n.Component).Pointer()
@@ -206,7 +206,7 @@ func Expand(n *Node, appRerender func(), currentFiber *FiberNode) *Node {
 		// Recursively render the component
 		rendered := n.Component.Render()
 		child := Expand(rendered, appRerender, childFiber)
-		
+
 		if childFiber != nil {
 			setActiveFiber(prevFiber)
 		}
