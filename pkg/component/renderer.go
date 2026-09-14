@@ -152,8 +152,39 @@ func (r *Renderer) renderDocument(newTree *Node) {
 	r.current = newTree
 }
 
+const svgNamespace = "http://www.w3.org/2000/svg"
+
+var svgTags = map[string]bool{
+	"svg":            true,
+	"path":           true,
+	"g":              true,
+	"circle":         true,
+	"ellipse":        true,
+	"line":           true,
+	"polyline":       true,
+	"polygon":        true,
+	"rect":           true,
+	"text":           true,
+	"tspan":          true,
+	"use":            true,
+	"defs":           true,
+	"symbol":         true,
+	"clippath":       true,
+	"mask":           true,
+	"pattern":        true,
+	"image":          true,
+	"marker":         true,
+	"lineargradient": true,
+	"radialgradient": true,
+	"stop":           true,
+}
+
 // createDOMNode creates a real DOM node from a virtual node.
 func (r *Renderer) createDOMNode(node *Node) js.Value {
+	return r.createDOMNodeNS(node, false)
+}
+
+func (r *Renderer) createDOMNodeNS(node *Node, isSVG bool) js.Value {
 	doc := js.Global().Get("document")
 
 	switch node.Type {
@@ -163,21 +194,30 @@ func (r *Renderer) createDOMNode(node *Node) js.Value {
 	case NodeTypeFragment:
 		frag := doc.Call("createDocumentFragment")
 		for _, child := range node.Children {
-			frag.Call("appendChild", r.createDOMNode(child))
+			frag.Call("appendChild", r.createDOMNodeNS(child, isSVG))
 		}
 		return frag
 
 	case NodeTypeComponent:
 		if node.Component != nil {
-			return r.createDOMNode(node.Component.Render())
+			return r.createDOMNodeNS(node.Component.Render(), isSVG)
 		}
 		return doc.Call("createTextNode", "")
 
 	default: // NodeTypeElement
-		el := doc.Call("createElement", node.Tag)
+		tagLower := strings.ToLower(node.Tag)
+		isElementSVG := isSVG || tagLower == "svg" || svgTags[tagLower]
+
+		var el js.Value
+		if isElementSVG {
+			el = doc.Call("createElementNS", svgNamespace, node.Tag)
+		} else {
+			el = doc.Call("createElement", node.Tag)
+		}
+
 		r.applyProps(el, node.Props, nil)
 		for _, child := range node.Children {
-			el.Call("appendChild", r.createDOMNode(child))
+			el.Call("appendChild", r.createDOMNodeNS(child, isElementSVG))
 		}
 
 		// Fire OnMount if it's attached to a component
@@ -278,7 +318,8 @@ func (r *Renderer) applyProps(el js.Value, newProps, oldProps Props) {
 			}
 			el.Call("setAttribute", k, valStr)
 		} else if k == "class" {
-			el.Set("className", fmt.Sprintf("%v", v))
+			classStr := fmt.Sprintf("%v", v)
+			el.Call("setAttribute", "class", classStr)
 		} else if k == "style" {
 			el.Set("style", fmt.Sprintf("%v", v))
 		} else if k == "innerHTML" {
