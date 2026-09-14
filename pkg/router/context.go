@@ -158,6 +158,30 @@ func (c *Context) Bind(v any) error {
 	return json.NewDecoder(c.r.Body).Decode(v)
 }
 
+// APIError represents the standard error response payload for API routes.
+type APIError struct {
+	Code      int    `json:"code"`
+	Message   string `json:"message"`
+	RequestID string `json:"request_id,omitempty"`
+}
+
+// ErrorResponse wraps APIError in an standard "error" envelope.
+type ErrorResponse struct {
+	Error APIError `json:"error"`
+}
+
+// Error writes a standardized JSON error response with status code, message, and request ID.
+func (c *Context) Error(status int, message string) error {
+	c.Status(status)
+	return c.JSON(ErrorResponse{
+		Error: APIError{
+			Code:      status,
+			Message:   message,
+			RequestID: c.RequestID(),
+		},
+	})
+}
+
 // Method returns the HTTP method of the request.
 func (c *Context) Method() string {
 	return c.r.Method

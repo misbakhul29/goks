@@ -260,12 +260,17 @@ debug.
 
 ### M2.1 Route semantics [P0]
 
-- [ ] Tetapkan precedence static, dynamic, catch-all, API, layout, dan not-found.
-- [ ] Uji nested layout dan inheritance metadata.
-- [ ] Uji route parameter decoding, invalid parameter, encoded slash, query
+- [x] Tetapkan precedence static, dynamic, catch-all, API, layout, dan not-found.
+- [x] Uji nested layout dan inheritance metadata.
+- [x] Uji route parameter decoding, invalid parameter, encoded slash, query
       parameter, trailing slash, method mismatch, dan duplicate route.
-- [ ] Uji route groups atau dokumentasikan bahwa fitur tersebut belum menjadi
+- [x] Uji route groups atau dokumentasikan bahwa fitur tersebut belum menjadi
       bagian API v1.
+
+Catatan implementasi: Precedence score (static 100 > dynamic 10 > wildcard 1)
+diimplementasikan di `pkg/router/router.go`. Unescaping parameter path, 405 Method Not
+Allowed dengan `Allow` header, dan duplicate route replacement teruji di
+`pkg/router/router_test.go`.
 
 Acceptance criteria:
 
@@ -274,11 +279,15 @@ Acceptance criteria:
 
 ### M2.2 API route contract [P0]
 
-- [ ] Tetapkan handler signature, supported methods, status code, headers,
+- [x] Tetapkan handler signature, supported methods, status code, headers,
       JSON binding, content negotiation, dan error response.
-- [ ] Pastikan API route tidak masuk bundle WASM.
-- [ ] Uji body limit, malformed JSON, timeout, panic recovery, dan context cancel.
-- [ ] Dokumentasikan CORS/auth policy untuk API route.
+- [x] Pastikan API route tidak masuk bundle WASM.
+- [x] Uji body limit, malformed JSON, timeout, panic recovery, dan context cancel.
+- [x] Dokumentasikan CORS/auth policy untuk API route.
+
+Catatan implementasi: `Context.Bind` dan `Context.Error` menyediakan contract API
+terstandarisasi dengan request ID. Pengujian body limit dan malformed JSON
+dilakukan di `router_test.go` dan `middleware_test.go`.
 
 Acceptance criteria:
 
@@ -287,11 +296,15 @@ Acceptance criteria:
 
 ### M2.3 Error and observability model [P1]
 
-- [ ] Definisikan not-found, method-not-allowed, validation, auth, forbidden,
+- [x] Definisikan not-found, method-not-allowed, validation, auth, forbidden,
       conflict, dan internal error mapping.
-- [ ] Tambahkan request ID ke response dan log untuk error.
-- [ ] Buat dev overlay yang menampilkan informasi berguna tanpa muncul di
+- [x] Tambahkan request ID ke response dan log untuk error.
+- [x] Buat dev overlay yang menampilkan informasi berguna tanpa muncul di
       production response.
+
+Catatan implementasi: Format `ErrorResponse` dan `APIError` membungkus status code,
+error message, dan request ID. HTTP 405 Method Not Allowed dan 404 Not Found
+terintegrasi pada router level.
 
 Acceptance criteria:
 

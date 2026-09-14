@@ -5,6 +5,7 @@ package router
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -16,9 +17,10 @@ type MiddlewareFunc func(Handler) Handler
 
 // Router is the GoKS HTTP router.
 type Router struct {
-	routes      []*Route
-	middlewares []MiddlewareFunc
-	notFound    Handler
+	routes           []*Route
+	middlewares      []MiddlewareFunc
+	notFound         Handler
+	methodNotAllowed Handler
 }
 
 // Route represents a registered route.
@@ -36,6 +38,10 @@ func New() *Router {
 			ctx.Status(http.StatusNotFound).Text("404 Not Found")
 			return nil
 		},
+		methodNotAllowed: func(ctx *Context) error {
+			ctx.Status(http.StatusMethodNotAllowed).Text("405 Method Not Allowed")
+			return nil
+		},
 	}
 }
 
@@ -46,9 +52,16 @@ func (r *Router) Use(mw ...MiddlewareFunc) {
 
 // Handle registers a route with a specific HTTP method.
 func (r *Router) Handle(method, pattern string, h Handler) {
+	method = strings.ToUpper(method)
 	pattern = normalizePath(pattern)
+	for _, existing := range r.routes {
+		if existing.method == method && existing.pattern == pattern {
+			existing.handler = h
+			return
+		}
+	}
 	r.routes = append(r.routes, &Route{
-		method:  strings.ToUpper(method),
+		method:  method,
 		pattern: pattern,
 		parts:   strings.Split(strings.Trim(pattern, "/"), "/"),
 		handler: h,
@@ -94,29 +107,56 @@ func (r *Router) Routes() []RouteInfo {
 // NotFound registers a custom 404 handler.
 func (r *Router) NotFound(h Handler) { r.notFound = h }
 
+// MethodNotAllowed registers a custom 405 handler.
+func (r *Router) MethodNotAllowed(h Handler) { r.methodNotAllowed = h }
+
+// calculateRouteScore determines precedence: static (100) > dynamic (10) > wildcard (1)
+func calculateRouteScore(parts []string) int {
+	score := 0
+	for _, p := range parts {
+		if strings.HasPrefix(p, "*") {
+			score += 1
+		} else if strings.HasPrefix(p, ":") {
+			score += 10
+		} else if p != "" {
+			score += 100
+		}
+	}
+	return score
+}
+
 // ServeHTTP implements http.Handler.
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	path := normalizePath(req.URL.Path)
-	params := make(map[string]string)
 
 	var matched *Route
-	for _, route := range r.routes {
-		if route.method != req.Method && !(req.Method == "HEAD" && route.method == "GET") {
-			continue
-		}
+	var matchedParams map[string]string
+	bestScore := -1
+	var allowedMethods []string
 
+	for _, route := range r.routes {
 		if ok, p := matchRoute(route.parts, path); ok {
-			matched = route
-			params = p
-			break
+			if route.method == req.Method || (req.Method == "HEAD" && route.method == "GET") {
+				score := calculateRouteScore(route.parts)
+				if score > bestScore {
+					bestScore = score
+					matched = route
+					matchedParams = p
+				}
+			} else {
+				allowedMethods = append(allowedMethods, route.method)
+			}
 		}
 	}
 
-	ctx := newContext(w, req, params)
+	ctx := newContext(w, req, matchedParams)
 
 	var h Handler
 	if matched != nil {
 		h = matched.handler
+	} else if len(allowedMethods) > 0 {
+		w.Header().Set("Allow", strings.Join(allowedMethods, ", "))
+		h = r.methodNotAllowed
 	} else {
 		h = r.notFound
 	}
@@ -131,7 +171,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-// matchRoute checks if a URL path matches a route pattern, extracting params.
+// matchRoute checks if a URL path matches a route pattern, extracting params with URL unescaping.
 func matchRoute(patternParts []string, path string) (bool, map[string]string) {
 	pathParts := strings.Split(strings.Trim(path, "/"), "/")
 
@@ -153,12 +193,22 @@ func matchRoute(patternParts []string, path string) (bool, map[string]string) {
 	for i, pp := range patternParts {
 		if strings.HasPrefix(pp, "*") {
 			if len(pp) > 1 {
-				params[pp[1:]] = strings.Join(pathParts[i:], "/")
+				raw := strings.Join(pathParts[i:], "/")
+				if unescaped, err := url.PathUnescape(raw); err == nil {
+					params[pp[1:]] = unescaped
+				} else {
+					params[pp[1:]] = raw
+				}
 			}
 			return true, params
 		} else if strings.HasPrefix(pp, ":") {
 			// Dynamic segment :slug
-			params[pp[1:]] = pathParts[i]
+			raw := pathParts[i]
+			if unescaped, err := url.PathUnescape(raw); err == nil {
+				params[pp[1:]] = unescaped
+			} else {
+				params[pp[1:]] = raw
+			}
 		} else if pp != pathParts[i] {
 			return false, nil
 		}
