@@ -26,6 +26,7 @@ import (
 	"github.com/misbakhul29/goks/pkg/action"
 	"github.com/misbakhul29/goks/pkg/component"
 	"github.com/misbakhul29/goks/pkg/font/google"
+	"github.com/misbakhul29/goks/pkg/image"
 	"github.com/misbakhul29/goks/pkg/metadata"
 	"github.com/misbakhul29/goks/pkg/router"
 	"github.com/misbakhul29/goks/pkg/rpc"
@@ -152,6 +153,22 @@ func (s *DevServer) initRoutes() {
 	// Server Actions Endpoint
 	s.router.POST("/__goks_action", func(ctx *router.Context) error {
 		action.Handler().ServeHTTP(ctx.Response(), ctx.Request())
+		return nil
+	})
+
+	// Image Optimizer Endpoint
+	var embeddedPublic http.FileSystem
+	if s.cfg.EmbeddedPublic != nil {
+		if subFS, err := fs.Sub(s.cfg.EmbeddedPublic, "public"); err == nil {
+			embeddedPublic = http.FS(subFS)
+		}
+	}
+	imgOpt := image.NewOptimizer(image.Config{
+		AppDir:         s.cfg.AppDir,
+		EmbeddedPublic: embeddedPublic,
+	})
+	s.router.GET("/__goks_image", func(ctx *router.Context) error {
+		imgOpt.ServeHTTP(ctx.Response(), ctx.Request())
 		return nil
 	})
 
