@@ -297,7 +297,7 @@ func ProfilePage() *component.Node {
 						component.Text("Alex Mercer"),
 					),
 					component.H("p", component.Props{"class": "text-sm text-zinc-400"}, 
-						component.Text("alex@goks.dev • Pro Tier"),
+						component.Text("alex@goks.misbakhul.com • Pro Tier"),
 					),
 				), nil
 			},
