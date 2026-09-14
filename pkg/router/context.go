@@ -73,6 +73,17 @@ func (c *Context) SetRequest(r *http.Request) {
 	c.r = r
 }
 
+// RequestID returns the request ID from the header or context.
+func (c *Context) RequestID() string {
+	if id := c.Header("X-Request-Id"); id != "" {
+		return id
+	}
+	if c.r != nil {
+		return RequestIDFromContext(c.r.Context())
+	}
+	return ""
+}
+
 // Response returns the underlying http.ResponseWriter.
 func (c *Context) Response() http.ResponseWriter {
 	return c.w

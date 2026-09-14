@@ -4,6 +4,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -65,6 +66,16 @@ type DevServer struct {
 	lr         *livereload.Server
 	wasm       string // path to compiled app.wasm
 	routesOnce sync.Once
+	httpServer *http.Server
+	serverMu   sync.Mutex
+}
+
+// Server is an alias to DevServer representing the GoKS HTTP runtime server.
+type Server = DevServer
+
+// New creates a new GoKS runtime server.
+func New(cfg Config) *Server {
+	return NewDev(cfg)
 }
 
 // NewDev creates a new development server.
@@ -80,7 +91,7 @@ func NewDev(cfg Config) *DevServer {
 	}
 
 	r := router.New()
-	r.Use(router.Logger(), router.Recover())
+	r.Use(router.Logger(), router.Recover(), router.RequestID())
 	if len(cfg.Middlewares) > 0 {
 		r.Use(cfg.Middlewares...)
 	}
@@ -95,6 +106,17 @@ func NewDev(cfg Config) *DevServer {
 // Router returns the underlying HTTP router instance.
 func (s *DevServer) Router() *router.Router {
 	return s.router
+}
+
+// Shutdown gracefully stops the HTTP server.
+func (s *DevServer) Shutdown(ctx context.Context) error {
+	s.serverMu.Lock()
+	srv := s.httpServer
+	s.serverMu.Unlock()
+	if srv == nil {
+		return nil
+	}
+	return srv.Shutdown(ctx)
 }
 
 // Start launches the dev server with file watching and live reload.
@@ -113,6 +135,10 @@ func (s *DevServer) Start() error {
 		Handler: s.router,
 	}
 
+	s.serverMu.Lock()
+	s.httpServer = srv
+	s.serverMu.Unlock()
+
 	// Graceful shutdown on SIGINT/SIGTERM
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -121,14 +147,18 @@ func (s *DevServer) Start() error {
 		log.Println("[GoKS] Shutting down...")
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		srv.Shutdown(ctx)
+		_ = srv.Shutdown(ctx)
 	}()
 
 	if os.Getenv("GOKS_CHILD_PORT") == "" {
 		log.Printf("[GoKS] 🚀 Server running at http://localhost:%d", s.cfg.Port)
 	}
 
-	return srv.ListenAndServe()
+	err := srv.ListenAndServe()
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
+	}
+	return err
 }
 
 // setupRoutes wires up all built-in and user routes idempotently.
@@ -137,6 +167,20 @@ func (s *DevServer) setupRoutes() {
 }
 
 func (s *DevServer) initRoutes() {
+	// Standard Health and Readiness probes (M1.3)
+	s.router.GET("/_goks/healthz", func(ctx *router.Context) error {
+		return ctx.Status(http.StatusOK).JSON(map[string]any{
+			"status": "ok",
+			"time":   time.Now().UTC().Format(time.RFC3339),
+		})
+	})
+	s.router.GET("/_goks/ready", func(ctx *router.Context) error {
+		return ctx.Status(http.StatusOK).JSON(map[string]any{
+			"status": "ready",
+			"time":   time.Now().UTC().Format(time.RFC3339),
+		})
+	})
+
 	// Live reload WebSocket endpoint
 	if s.cfg.DevMode {
 		s.router.GET("/__goks_livereload", func(ctx *router.Context) error {

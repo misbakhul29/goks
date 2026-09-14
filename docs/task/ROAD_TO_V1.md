@@ -184,13 +184,17 @@ Tujuan: runtime aman dan dapat dipakai di bawah traffic nyata.
 
 ### M1.1 Middleware contract [P0]
 
-- [ ] Tetapkan dan dokumentasikan urutan middleware: Logger, CORS, Secure,
+- [x] Tetapkan dan dokumentasikan urutan middleware: Logger, CORS, Secure,
       RequestID, Compress, MaxBytes, Timeout, auth, dan application middleware.
-- [ ] Uji bahwa semua route menerima policy yang sama, termasuk API route dan
+- [x] Uji bahwa semua route menerima policy yang sama, termasuk API route dan
       error response.
-- [ ] Tetapkan default yang aman untuk CORS, timeout, body limit, dan security
+- [x] Tetapkan default yang aman untuk CORS, timeout, body limit, dan security
       headers.
-- [ ] Dokumentasikan cara override default tanpa menghapus kontrol keamanan.
+- [x] Dokumentasikan cara override default tanpa menghapus kontrol keamanan.
+
+Catatan implementasi: Urutan middleware dan short-circuit teruji di
+`pkg/router/middleware_test.go`. Safe error response (tanpa leak panic message/secrets),
+HSTS HTTPS-only guard, context-propagated Request ID, dan body limit terverifikasi.
 
 Acceptance criteria:
 
@@ -199,11 +203,15 @@ Acceptance criteria:
 
 ### M1.2 Request lifecycle dan graceful shutdown [P0]
 
-- [ ] Pastikan context request diteruskan sampai handler, action, ORM, dan
+- [x] Pastikan context request diteruskan sampai handler, action, ORM, dan
       external call.
-- [ ] Implementasikan atau verifikasi graceful shutdown dengan deadline.
-- [ ] Drain in-flight HTTP request dan tutup WebSocket connection dengan bersih.
-- [ ] Uji SIGTERM/SIGINT pada standard dan standalone build.
+- [x] Implementasikan atau verifikasi graceful shutdown dengan deadline.
+- [x] Drain in-flight HTTP request dan tutup WebSocket connection dengan bersih.
+- [x] Uji SIGTERM/SIGINT pada standard dan standalone build.
+
+Catatan implementasi: `runtime/server` menyediakan `Shutdown(ctx)` terprogram dan
+menangani `http.ErrServerClosed` secara bersih. Test lifecycle dan shutdown
+terverifikasi di `runtime/server/server_test.go`.
 
 Acceptance criteria:
 
@@ -212,11 +220,15 @@ Acceptance criteria:
 
 ### M1.3 Structured logging dan health [P1]
 
-- [ ] Tetapkan structured log schema: timestamp, level, request ID, method,
+- [x] Tetapkan structured log schema: timestamp, level, request ID, method,
       path, status, latency, dan error class.
-- [ ] Pisahkan log developer dari log production.
-- [ ] Sediakan pola endpoint health/readiness yang tidak bergantung pada Studio.
-- [ ] Dokumentasikan liveness, readiness, dependency failure, dan shutdown.
+- [x] Pisahkan log developer dari log production.
+- [x] Sediakan pola endpoint health/readiness yang tidak bergantung pada Studio.
+- [x] Dokumentasikan liveness, readiness, dependency failure, dan shutdown.
+
+Catatan implementasi: `/_goks/healthz` dan `/_goks/ready` tersedia secara bawaan di
+runtime server dan teruji di `runtime/server/server_test.go`. Request ID otomatis
+terintegrasi pada context dan response header.
 
 Acceptance criteria:
 
@@ -225,11 +237,15 @@ Acceptance criteria:
 
 ### M1.4 Concurrency/load baseline [P1]
 
-- [ ] Tambahkan concurrent request test untuk `runtime/server` dan router.
-- [ ] Audit `pkg/ws` untuk goroutine leak, slow consumer, concurrent write,
+- [x] Tambahkan concurrent request test untuk `runtime/server` dan router.
+- [x] Audit `pkg/ws` untuk goroutine leak, slow consumer, concurrent write,
       room lifecycle, dan authorization.
-- [ ] Audit `pkg/store` untuk race, subscription leak, dan update ordering.
-- [ ] Tambahkan benchmark baseline untuk router, component render, dan WS hub.
+- [x] Audit `pkg/store` untuk race, subscription leak, dan update ordering.
+- [x] Tambahkan benchmark baseline untuk router, component render, dan WS hub.
+
+Catatan implementasi: Benchmark baseline ditambahkan di `pkg/router/router_bench_test.go`,
+`pkg/component/component_bench_test.go`, dan `pkg/ws/ws_bench_test.go`.
+Concurrent load test ditambahkan di `runtime/server/server_test.go`.
 
 Acceptance criteria:
 

@@ -14,8 +14,10 @@ func Secure() MiddlewareFunc {
 			// Prevents MIME-sniffing
 			ctx.SetHeader("X-Content-Type-Options", "nosniff")
 
-			// Enforces HTTPS (Strict-Transport-Security) for 1 year
-			ctx.SetHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+			// Enforces HTTPS (Strict-Transport-Security) for 1 year when served over HTTPS
+			if ctx.Request().TLS != nil || ctx.Header("X-Forwarded-Proto") == "https" {
+				ctx.SetHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+			}
 
 			// Controls how much referrer information should be included with requests
 			ctx.SetHeader("Referrer-Policy", "strict-origin-when-cross-origin")
