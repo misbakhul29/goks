@@ -32,6 +32,7 @@ type Manager struct {
 	mu       sync.RWMutex
 	sessions map[string]*Session
 	ttl      time.Duration
+	stopGC   chan struct{}
 }
 
 // Default is the global auth manager.
@@ -42,13 +43,33 @@ func New(ttl time.Duration) *Manager {
 	m := &Manager{
 		sessions: make(map[string]*Session),
 		ttl:      ttl,
+		stopGC:   make(chan struct{}),
 	}
 	go m.gcLoop()
 	return m
 }
 
+// Close stops the background session garbage collector.
+func (m *Manager) Close() {
+	if m.stopGC != nil {
+		select {
+		case <-m.stopGC:
+			// already closed
+		default:
+			close(m.stopGC)
+		}
+	}
+}
+
 // Login creates a new session for the given user and sets a cookie.
+// It invalidates any existing session token from the request to prevent session fixation.
 func (m *Manager) Login(w http.ResponseWriter, r *http.Request, user *User) (*Session, error) {
+	if oldCookie, err := r.Cookie("goks_session"); err == nil && oldCookie.Value != "" {
+		m.mu.Lock()
+		delete(m.sessions, oldCookie.Value)
+		m.mu.Unlock()
+	}
+
 	token, err := generateToken()
 	if err != nil {
 		return nil, err
@@ -164,14 +185,19 @@ func generateToken() (string, error) {
 func (m *Manager) gcLoop() {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
-	for range ticker.C {
-		now := time.Now()
-		m.mu.Lock()
-		for k, s := range m.sessions {
-			if now.After(s.ExpiresAt) {
-				delete(m.sessions, k)
+	for {
+		select {
+		case <-m.stopGC:
+			return
+		case <-ticker.C:
+			now := time.Now()
+			m.mu.Lock()
+			for k, s := range m.sessions {
+				if now.After(s.ExpiresAt) {
+					delete(m.sessions, k)
+				}
 			}
+			m.mu.Unlock()
 		}
-		m.mu.Unlock()
 	}
 }

@@ -72,3 +72,36 @@ func TestManager_Login_SecureCookie(t *testing.T) {
 		t.Fatalf("expected session cookie to have HttpOnly=true")
 	}
 }
+
+func TestManager_SessionFixationProtection(t *testing.T) {
+	m := auth.New(time.Hour)
+	defer m.Close()
+
+	// 1. First login
+	w1 := httptest.NewRecorder()
+	r1 := httptest.NewRequest("POST", "/login", nil)
+	sess1, err := m.Login(w1, r1, &auth.User{ID: 1, Email: "user1@example.com"})
+	if err != nil {
+		t.Fatalf("first login failed: %v", err)
+	}
+
+	// 2. Second login using same cookie (attacker/fixation scenario)
+	w2 := httptest.NewRecorder()
+	r2 := httptest.NewRequest("POST", "/login", nil)
+	r2.AddCookie(&http.Cookie{Name: "goks_session", Value: sess1.Token})
+
+	sess2, err := m.Login(w2, r2, &auth.User{ID: 2, Email: "user2@example.com"})
+	if err != nil {
+		t.Fatalf("second login failed: %v", err)
+	}
+
+	// Old session token MUST be invalidated
+	if _, ok := m.SessionFromRequest(r2); ok {
+		t.Fatal("expected old session token to be invalidated upon new login (session fixation prevention)")
+	}
+
+	// New session must be distinct and valid
+	if sess1.Token == sess2.Token {
+		t.Fatal("expected new session token to differ from old token")
+	}
+}

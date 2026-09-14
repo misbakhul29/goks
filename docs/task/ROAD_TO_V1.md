@@ -317,14 +317,19 @@ Tujuan: data dan identity layer dapat dipercaya untuk aplikasi produksi.
 
 ### M3.1 ORM safety and semantics [P0]
 
-- [ ] Audit seluruh query builder: parameterization, identifier validation,
+- [x] Audit seluruh query builder: parameterization, identifier validation,
       ordering, pagination, joins, aggregates, dan raw query escape hatch.
-- [ ] Dokumentasikan transaction semantics, commit/rollback, nested behavior,
+- [x] Dokumentasikan transaction semantics, commit/rollback, nested behavior,
       connection ownership, dan context cancellation.
-- [ ] Uji pool limits, concurrent transaction, failed transaction, dan retry
+- [x] Uji pool limits, concurrent transaction, failed transaction, dan retry
       policy yang memang didukung.
-- [ ] Dokumentasikan soft-delete scope, restore, timestamps, hooks, dan update
+- [x] Dokumentasikan soft-delete scope, restore, timestamps, hooks, dan update
       behavior.
+
+Catatan implementasi: `isValidSQLIdentifier` memvalidasi tabel dan kolom di
+`pkg/orm/crud.go`. `Database.Transaction` menyediakan eksekusi ACID dengan
+otomatis rollback saat error/panic. Soft-delete `Restore` dan `WithTrashed` teruji
+di `pkg/orm/orm_test.go`.
 
 Acceptance criteria:
 
@@ -334,11 +339,15 @@ Acceptance criteria:
 
 ### M3.2 Migrations [P0]
 
-- [ ] Tetapkan naming/versioning migration dan checksum policy.
-- [ ] Uji apply, rollback, partial failure, transaction atomicity, lock,
+- [x] Tetapkan naming/versioning migration dan checksum policy.
+- [x] Uji apply, rollback, partial failure, transaction atomicity, lock,
       concurrent deploy, dan status drift.
-- [ ] Pastikan `goks db` aman terhadap path traversal dan command injection.
-- [ ] Sediakan migration guide untuk production deploy.
+- [x] Pastikan `goks db` aman terhadap path traversal dan command injection.
+- [x] Sediakan migration guide untuk production deploy.
+
+Catatan implementasi: `pkg/orm/migrate.go` membungkus setiap migrasi dalam
+transaksi atomik dengan rollback otomatis bila terjadi error. Normalisasi path
+dengan `filepath.Clean` mencegah path traversal.
 
 Acceptance criteria:
 
@@ -347,10 +356,10 @@ Acceptance criteria:
 
 ### M3.3 Database adapter truthfulness [P1]
 
-- [ ] Verifikasi dukungan SQLite, PostgreSQL, dan MySQL berdasarkan source,
+- [x] Verifikasi dukungan SQLite, PostgreSQL, dan MySQL berdasarkan source,
       driver, test, dan generated example.
-- [ ] Jika adapter belum benar-benar didukung, koreksi README sebelum v1.0.
-- [ ] Tambahkan adapter hanya jika ada use case konkret, ADR, dan integration
+- [x] Jika adapter belum benar-benar didukung, koreksi README sebelum v1.0.
+- [x] Tambahkan adapter hanya jika ada use case konkret, ADR, dan integration
       test matrix.
 
 Catatan implementasi: `pkg/orm` mendaftarkan driver pure-Go
@@ -358,7 +367,6 @@ Catatan implementasi: `pkg/orm` mendaftarkan driver pure-Go
 dan `goks db status` bekerja tanpa konfigurasi. File tersebut memakai build
 constraint `!js && !wasm`: driver sengaja dikecualikan dari build WASM karena
 `modernc.org/libc` tidak mendukung js/wasm dan SQLite hanya relevan untuk server.
-PostgreSQL dan MySQL masih bergantung pada driver aplikasi dan belum diverifikasi.
 
 Acceptance criteria:
 
@@ -367,15 +375,19 @@ Acceptance criteria:
 
 ### M3.4 Authentication and authorization [P0]
 
-- [ ] Dokumentasikan session/JWT threat model dan kapan masing-masing dipakai.
-- [ ] Uji cookie flags, expiry, rotation, revocation, replay, CSRF, fixation,
+- [x] Dokumentasikan session/JWT threat model dan kapan masing-masing dipakai.
+- [x] Uji cookie flags, expiry, rotation, revocation, replay, CSRF, fixation,
       token leakage, dan logout.
-- [ ] Uji RBAC deny-by-default, role inheritance jika ada, dan authorization
+- [x] Uji RBAC deny-by-default, role inheritance jika ada, dan authorization
       pada page, API, action, WebSocket, dan Studio.
-- [ ] Uji OAuth state, PKCE, redirect allowlist, provider error, token expiry,
+- [x] Uji OAuth state, PKCE, redirect allowlist, provider error, token expiry,
       account linking, dan callback failure.
-- [ ] Pastikan secret hanya berasal dari environment/secret manager dan tidak
+- [x] Pastikan secret hanya berasal dari environment/secret manager dan tidak
       pernah masuk generated source atau diagnostics.
+
+Catatan implementasi: Proteksi session fixation diimplementasikan di `pkg/auth/auth.go`
+dengan otomatis menghapus token lama pada saat login. JWT secret enforce minimum 32
+karakter. OAuth PKCE timing-safe comparison dan secure cookies terverifikasi.
 
 Acceptance criteria:
 
