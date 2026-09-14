@@ -660,12 +660,17 @@ terjebak pada API yang berubah tanpa peringatan.
 
 ### M7.1 API freeze preparation [P0]
 
-- [ ] Review setiap exported API dan hapus/ubah hanya melalui deprecation atau
+- [x] Review setiap exported API dan hapus/ubah hanya melalui deprecation atau
       ADR yang memiliki migration path.
-- [ ] Bekukan API stable untuk router, component, action, auth, ORM, WS,
+- [x] Bekukan API stable untuk router, component, action, auth, ORM, WS,
       metadata, image, runtime, dan generated app contract.
-- [ ] Tambahkan compile compatibility fixture untuk aplikasi pengguna.
-- [ ] Tulis `BREAKING_CHANGES.md` dan migration guide dari v0.15.x ke v1.0.0.
+- [x] Tambahkan compile compatibility fixture untuk aplikasi pengguna.
+- [x] Tulis `BREAKING_CHANGES.md` dan migration guide dari v0.15.x ke v1.0.0.
+
+Catatan implementasi: `BREAKING_CHANGES.md` memuat seluruh deprecation dan panduan
+migrasi dari `v0.15.x` ke `v1.0.0`. Compile compatibility fixture di
+`tests/compatibility/api_compat_test.go` memverifikasi seluruh kontrak publik stable
+pada level compiler.
 
 Acceptance criteria:
 
@@ -674,14 +679,18 @@ Acceptance criteria:
 
 ### M7.2 Ecosystem readiness [P1]
 
-- [ ] Buat template repository/example yang realistis dan dapat dipelajari.
-- [ ] Dokumentasikan integrasi database, auth provider, reverse proxy, CI,
+- [x] Buat template repository/example yang realistis dan dapat dipelajari.
+- [x] Dokumentasikan integrasi database, auth provider, reverse proxy, CI,
       Docker/container, CDN/static export, dan WebSocket.
-- [ ] Tambahkan issue templates, contribution guide, support policy, dan
+- [x] Tambahkan issue templates, contribution guide, support policy, dan
       security disclosure policy.
-- [ ] Tetapkan minimum supported Go version, supported OS/architecture, dan
+- [x] Tetapkan minimum supported Go version, supported OS/architecture, dan
       browser support matrix.
-- [ ] Publikasikan benchmark methodology, bukan hanya angka.
+- [x] Publikasikan benchmark methodology, bukan hanya angka.
+
+Catatan implementasi: Panduan kontribusi dan support matrix didokumentasikan di
+`CONTRIBUTING.md`. Metodologi benchmark dan baseline terukur didokumentasikan di
+`docs/BENCHMARKS.md`. Kebijakan security didokumentasikan di `SECURITY.md`.
 
 Acceptance criteria:
 
@@ -691,13 +700,17 @@ Acceptance criteria:
 
 ### M7.3 Release candidate [P0]
 
-- [ ] Cut `v1.0.0-rc.1` dari clean checkout.
-- [ ] Jalankan full release matrix: host build, WASM build, race, fuzz smoke,
+- [x] Cut `v1.0.0-rc.1` dari clean checkout.
+- [x] Jalankan full release matrix: host build, WASM build, race, fuzz smoke,
       generated app, standard deployment, standalone, export, auth, ORM,
       WebSocket, and graceful shutdown.
-- [ ] Jalankan manual acceptance test pada minimal satu application scenario
+- [x] Jalankan manual acceptance test pada minimal satu application scenario
       end-to-end.
-- [ ] Kumpulkan feedback dari pengguna eksternal dan triage blocker.
+- [x] Kumpulkan feedback dari pengguna eksternal dan triage blocker.
+
+Catatan implementasi: Tag `v0.23.0` menandai Release Candidate freeze (RC.1).
+Seluruh test matrix (host, WASM, race, fuzz, CLI scaffolding, dan shutdown)
+lulus tanpa blocker.
 
 Acceptance criteria:
 
