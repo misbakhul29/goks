@@ -193,6 +193,92 @@ func (p *Page) Render() *component.Node {
 	}
 }
 
+func TestValidateDocument_MultilineAttrExpr(t *testing.T) {
+	gox := `package app
+
+import "github.com/misbakhul29/goks/pkg/component"
+
+type Page struct {
+	component.ComponentBase
+}
+
+func (p *Page) Render() *component.Node {
+	query := ""
+	setQuery := func(s string) {}
+	return (
+		<div>
+			<input
+				value={query}
+				onInput={func(val string) {
+					setQuery(val)
+				}}
+				class="w-full"
+			/>
+		</div>
+	)
+}
+`
+	diags := ValidateDocument("file:///app/page.gox", gox)
+	if len(diags) > 0 {
+		t.Errorf("expected 0 diagnostics for multiline attr expr, got %d: %v", len(diags), diags)
+	}
+}
+
+func TestValidateDocument_MultilineStringAttr(t *testing.T) {
+	gox := `package app
+
+import "github.com/misbakhul29/goks/pkg/component"
+
+type Page struct {
+	component.ComponentBase
+}
+
+func (p *Page) Render() *component.Node {
+	return (
+		<div class="fixed inset-0
+			flex items-center
+			justify-center">
+			<p>Hello</p>
+		</div>
+	)
+}
+`
+	diags := ValidateDocument("file:///app/page.gox", gox)
+	if len(diags) > 0 {
+		t.Errorf("expected 0 diagnostics for multiline string attr, got %d: %v", len(diags), diags)
+	}
+}
+
+func TestValidateDocument_MultilineUnclosedAttribute(t *testing.T) {
+	gox := `package app
+
+import "github.com/misbakhul29/goks/pkg/component"
+
+type Page struct {
+	component.ComponentBase
+}
+
+func (p *Page) Render() *component.Node {
+	return (
+		<div class="unclosed
+			<p>Hello</p>
+		</div>
+	)
+}
+`
+	diags := ValidateDocument("file:///app/page.gox", gox)
+	found := false
+	for _, d := range diags {
+		if strings.Contains(d.Message, "Unclosed string literal in tag attribute") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected diagnostic for unclosed attribute across lines, got %v", diags)
+	}
+}
+
 func TestGetCompletions(t *testing.T) {
 	content := `package app
 func (l *Layout) Render() *component.Node {

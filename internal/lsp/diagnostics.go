@@ -336,42 +336,54 @@ func sanitizeNakedAmpersands(jsx string) string {
 }
 
 func checkUnclosedAttributes(jsx string, baseOffset int, fullContent string) *Diagnostic {
-	lines := strings.Split(jsx, "\n")
 	inTag := false
-	for i, line := range lines {
-		// Look for unclosed quote in tag attributes
-		inQuote := false
-		quoteChar := rune(0)
-		for _, r := range line {
-			if !inTag {
-				if r == '<' {
-					inTag = true
+	inQuote := false
+	quoteChar := rune(0)
+	quoteStartOffset := 0
+
+	for offset, r := range jsx {
+		if !inTag {
+			if r == '<' {
+				inTag = true
+			}
+		} else {
+			if !inQuote {
+				if r == '>' {
+					inTag = false
+				} else if r == '"' || r == '\'' {
+					inQuote = true
+					quoteChar = r
+					quoteStartOffset = offset
 				}
 			} else {
-				if !inQuote {
-					if r == '>' {
-						inTag = false
-					} else if r == '"' || r == '\'' {
-						inQuote = true
-						quoteChar = r
-					}
-				} else if r == quoteChar {
+				if r == quoteChar {
 					inQuote = false
+				} else if r == '>' || r == '<' {
+					lineNum, col := offsetToLineCol(fullContent, baseOffset+quoteStartOffset)
+					return &Diagnostic{
+						Range: Range{
+							Start: Position{Line: lineNum, Character: col},
+							End:   Position{Line: lineNum, Character: col + 1},
+						},
+						Severity: SeverityError,
+						Source:   "gox",
+						Message:  "Unclosed string literal in tag attribute",
+					}
 				}
 			}
 		}
-		if inQuote {
-			lineNum, _ := offsetToLineCol(fullContent, baseOffset)
-			targetLine := lineNum + i
-			return &Diagnostic{
-				Range: Range{
-					Start: Position{Line: targetLine, Character: 0},
-					End:   Position{Line: targetLine, Character: len(line)},
-				},
-				Severity: SeverityError,
-				Source:   "gox",
-				Message:  "Unclosed string literal in tag attribute",
-			}
+	}
+
+	if inQuote {
+		lineNum, col := offsetToLineCol(fullContent, baseOffset+quoteStartOffset)
+		return &Diagnostic{
+			Range: Range{
+				Start: Position{Line: lineNum, Character: col},
+				End:   Position{Line: lineNum, Character: col + 1},
+			},
+			Severity: SeverityError,
+			Source:   "gox",
+			Message:  "Unclosed string literal in tag attribute",
 		}
 	}
 	return nil

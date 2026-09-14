@@ -11,7 +11,7 @@ const (
 	// ModulePath is the canonical Go module path for GoKS.
 	ModulePath = "github.com/misbakhul29/goks"
 	// Version is the source-tree fallback used for development builds.
-	Version = "v1.1.1"
+	Version = "v1.1.2"
 )
 
 // Current returns the version embedded in build information when available.
