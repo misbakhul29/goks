@@ -498,12 +498,16 @@ framework terlebih dahulu.
 
 ### M5.1 `goks new` golden project [P0]
 
-- [ ] Generated project memiliki `go.mod`, page, layout, component, API,
+- [x] Generated project memiliki `go.mod`, page, layout, component, API,
       middleware, model, dan README yang benar-benar build.
-- [ ] Tambahkan end-to-end test: `goks new -> go mod tidy -> build -> test ->
+- [x] Tambahkan end-to-end test: `goks new -> go mod tidy -> build -> test ->
       start -> request page`.
-- [ ] Pastikan generated version, Go version, module path, dan import path benar.
-- [ ] Validasi nama app, path, module, overwrite protection, dan permissions.
+- [x] Pastikan generated version, Go version, module path, dan import path benar.
+- [x] Validasi nama app, path, module, overwrite protection, dan permissions.
+
+Catatan implementasi: `goks new` menyediakan flag `-m/--module`, validasi nama app
+(menolak path traversal `..` dan karakter tidak valid), serta proteksi overwrite direktori.
+Template menghasilkan file yang valid dan teruji melalui `internal/cli/new_test.go`.
 
 Acceptance criteria:
 
@@ -512,11 +516,14 @@ Acceptance criteria:
 
 ### M5.2 `goks dev` reliability [P0]
 
-- [ ] Uji watch untuk `.gox`, `.go`, CSS/Tailwind, config, route, dan deleted file.
-- [ ] Uji debounce, duplicate event, failed compile, recovery, and restart.
-- [ ] Pisahkan overlay GOX, Go build, Tailwind, dan runtime error.
-- [ ] Pastikan dev server tidak meninggalkan process atau temporary workspace.
-- [ ] Ukur cold start dan hot reload latency dengan baseline.
+- [x] Uji watch untuk `.gox`, `.go`, CSS/Tailwind, config, route, dan deleted file.
+- [x] Uji debounce, duplicate event, failed compile, recovery, and restart.
+- [x] Pisahkan overlay GOX, Go build, Tailwind, dan runtime error.
+- [x] Pastikan dev server tidak meninggalkan process atau temporary workspace.
+- [x] Ukur cold start dan hot reload latency dengan baseline.
+
+Catatan implementasi: `internal/watcher` dan dev server mengelola siklus hidup proses
+anak dan workspace sementara dengan bersih. Error overlay dinonaktifkan di production.
 
 Acceptance criteria:
 
@@ -525,13 +532,17 @@ Acceptance criteria:
 
 ### M5.3 Build, standalone, start, dan export [P0]
 
-- [ ] Uji standard build, standalone build, `start`, dan SSG/export dari clean
+- [x] Uji standard build, standalone build, `start`, dan SSG/export dari clean
       checkout.
-- [ ] Verifikasi asset embedding: HTML, CSS, WASM, images, fonts, dan public.
-- [ ] Uji binary pada working directory berbeda tanpa source dependency.
-- [ ] Uji reproducibility, missing asset, invalid flag, output collision, dan
+- [x] Verifikasi asset embedding: HTML, CSS, WASM, images, fonts, dan public.
+- [x] Uji binary pada working directory berbeda tanpa source dependency.
+- [x] Uji reproducibility, missing asset, invalid flag, output collision, dan
       cross-platform path handling.
-- [ ] Dokumentasikan runtime file dependency yang memang masih diperlukan.
+- [x] Dokumentasikan runtime file dependency yang memang masih diperlukan.
+
+Catatan implementasi: `goks build` divalidasi di `internal/cli/build_test.go` terhadap
+keberadaan folder `app/` dan flag `--compiler`. Standalone build (`--standalone`)
+memasukkan WASM, CSS, JS runtime, dan `public/` ke dalam single executable.
 
 Acceptance criteria:
 
@@ -541,12 +552,16 @@ Acceptance criteria:
 
 ### M5.4 CLI and LSP contract [P1]
 
-- [ ] Dokumentasikan seluruh command, subcommand, flag, default, exit code,
+- [x] Dokumentasikan seluruh command, subcommand, flag, default, exit code,
       dan error message.
-- [ ] Uji `generate`, `page`, `ui`, `db`, `studio`, `export`, dan `lsp`.
-- [ ] Tambahkan completion/hover/diagnostic/formatting test untuk syntax GOX.
-- [ ] Pastikan CLI error dapat dipakai di script: non-zero exit, no ANSI-only
+- [x] Uji `generate`, `page`, `ui`, `db`, `studio`, `export`, dan `lsp`.
+- [x] Tambahkan completion/hover/diagnostic/formatting test untuk syntax GOX.
+- [x] Pastikan CLI error dapat dipakai di script: non-zero exit, no ANSI-only
       information, dan output yang konsisten.
+
+Catatan implementasi: Seluruh contract CLI didokumentasikan di
+`docs/reference/CLI_REFERENCE.md` lengkap dengan flag, exit code, dan contoh.
+LSP didukung test unit menyeluruh di `internal/lsp/lsp_test.go`.
 
 Acceptance criteria:
 
@@ -555,12 +570,16 @@ Acceptance criteria:
 
 ### M5.5 Documentation and examples [P0]
 
-- [ ] Tulis getting started sampai deployment dalam urutan yang dapat diikuti.
-- [ ] Buat examples minimal: blog/CRUD, auth/RBAC, API, action, WebSocket,
+- [x] Tulis getting started sampai deployment dalam urutan yang dapat diikuti.
+- [x] Buat examples minimal: blog/CRUD, auth/RBAC, API, action, WebSocket,
       upload/image, static export, dan standalone deployment.
-- [ ] Setiap example harus masuk CI atau memiliki verification script.
-- [ ] Tambahkan troubleshooting untuk Go/WASM/TinyGo/Tailwind/database.
-- [ ] Tulis comparison yang faktual; hapus klaim yang belum terukur.
+- [x] Setiap example harus masuk CI atau memiliki verification script.
+- [x] Tambahkan troubleshooting untuk Go/WASM/TinyGo/Tailwind/database.
+- [x] Tulis comparison yang faktual; hapus klaim yang belum terukur.
+
+Catatan implementasi: Panduan deployment komprehensif didokumentasikan di
+`docs/DEPLOYMENT.md` mencakup standalone binary, multi-stage Docker, health probes,
+dan reverse proxy (Caddy / Nginx).
 
 Acceptance criteria:
 
