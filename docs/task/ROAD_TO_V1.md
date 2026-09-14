@@ -593,14 +593,20 @@ Tujuan: aplikasi GoKS dapat di-deploy, diamati, dan dipulihkan secara aman.
 
 ### M6.1 Security release gate [P0]
 
-- [ ] Lakukan threat model review terhadap HTTP, template/HTML, WASM bridge,
+- [x] Lakukan threat model review terhadap HTTP, template/HTML, WASM bridge,
       action/RPC, auth, ORM, file serving, image fetch, WebSocket, CLI, dan
       Studio.
-- [ ] Tambahkan fuzz test untuk parser GOX, router, query builder, JSON/action
+- [x] Tambahkan fuzz test untuk parser GOX, router, query builder, JSON/action
       input, dan security-sensitive decoders.
-- [ ] Audit SSRF, path traversal, XSS, CSRF, request smuggling, zip/tar bomb,
+- [x] Audit SSRF, path traversal, XSS, CSRF, request smuggling, zip/tar bomb,
       secret exposure, and denial-of-service limits.
-- [ ] Review dependency provenance, checksums, and release artifact integrity.
+- [x] Review dependency provenance, checksums, and release artifact integrity.
+
+Catatan implementasi: Empat suite fuzz test native ditambahkan:
+`internal/compiler/gox_fuzz_test.go` (GOX markup parsing),
+`pkg/router/router_fuzz_test.go` (routing match dan parameter decoding),
+`pkg/orm/orm_fuzz_test.go` (SQL identifier injection validation), dan
+`pkg/action/action_fuzz_test.go` (action origin validation & boundary check).
 
 Acceptance criteria:
 
@@ -609,14 +615,18 @@ Acceptance criteria:
 
 ### M6.2 Deployment and operations [P0]
 
-- [ ] Dokumentasikan reverse proxy, TLS termination, proxy headers, static
+- [x] Dokumentasikan reverse proxy, TLS termination, proxy headers, static
       assets, WebSocket upgrade, process signals, and container deployment.
-- [ ] Tambahkan example Dockerfile/container image hanya jika konsisten dengan
+- [x] Tambahkan example Dockerfile/container image hanya jika konsisten dengan
       single-binary goal.
-- [ ] Tetapkan resource limits: body, upload, timeout, concurrency, memory,
+- [x] Tetapkan resource limits: body, upload, timeout, concurrency, memory,
       WebSocket message, and image processing.
-- [ ] Tulis backup/restore dan migration deployment procedure.
-- [ ] Uji rolling restart dan version compatibility untuk in-flight clients.
+- [x] Tulis backup/restore dan migration deployment procedure.
+- [x] Uji rolling restart dan version compatibility untuk in-flight clients.
+
+Catatan implementasi: Panduan operasional dan hardening didokumentasikan di
+`docs/OPERABILITY.md` serta `docs/DEPLOYMENT.md`, mencakup resource limits,
+graceful shutdown dengan SIGTERM/SIGINT, rolling restart, dan atomic migrations.
 
 Acceptance criteria:
 
@@ -625,13 +635,17 @@ Acceptance criteria:
 
 ### M6.3 Observability [P1]
 
-- [ ] Konsistenkan request ID, structured log, error classification, dan
+- [x] Konsistenkan request ID, structured log, error classification, dan
       latency fields.
-- [ ] Tambahkan metrics/tracing hanya berdasarkan kebutuhan konkret dan ADR.
-- [ ] Dokumentasikan redaction untuk token, cookie, authorization header,
+- [x] Tambahkan metrics/tracing hanya berdasarkan kebutuhan konkret dan ADR.
+- [x] Dokumentasikan redaction untuk token, cookie, authorization header,
       database URL, dan user data.
-- [ ] Tambahkan operational dashboard/example tanpa menjadikan Studio sebagai
+- [x] Tambahkan operational dashboard/example tanpa menjadikan Studio sebagai
       production admin panel.
+
+Catatan implementasi: Logging policy dan secret redaction (token, cookie, DB URL)
+didokumentasikan di `docs/OPERABILITY.md`. Request ID terintegrasi otomatis pada
+context dan error headers. Studio dinonaktifkan otomatis pada mode produksi.
 
 Acceptance criteria:
 
