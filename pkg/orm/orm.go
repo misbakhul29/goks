@@ -45,7 +45,7 @@ type Database struct {
 }
 
 // Connect opens a database connection.
-// driver: "postgres", "mysql", "sqlite3"
+// driver: "postgres", "mysql", "sqlite"
 func Connect(driver, dsn string) (*Database, error) {
 	db, err := sql.Open(driver, dsn)
 	if err != nil {

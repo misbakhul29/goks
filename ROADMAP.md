@@ -6,6 +6,9 @@ Priority levels: **P0** (foundation, blocking), **P1** (core runtime/product),
 Detail and acceptance criteria for each item live under `.agents/roadmap/`.
 This file is the index — keep item names in sync with those files.
 
+The product and engineering execution backlog from v0.15.1 to v1.0.0 lives in
+`docs/task/ROAD_TO_V1.md`.
+
 ## P0 — Foundation
 - Architecture audit (`GOKS_ARCHITECTURE_AUDIT.md`) completed and current.
 - Public API surface inventoried and marked stable/experimental.

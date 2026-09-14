@@ -1,6 +1,7 @@
 package orm
 
 import (
+	"path/filepath"
 	"testing"
 )
 
@@ -81,5 +82,17 @@ func TestDialect_SQLite(t *testing.T) {
 	d2 := dialectFor("sqlite")
 	if d2.Placeholder(1) != "?" {
 		t.Errorf("expected ? for SQLite placeholder, got %s", d2.Placeholder(1))
+	}
+}
+
+func TestOpenSQLite_RegistersDefaultDriver(t *testing.T) {
+	db, err := OpenSQLite(filepath.Join(t.TempDir(), "app.db"))
+	if err != nil {
+		t.Fatalf("OpenSQLite() error = %v", err)
+	}
+	defer db.Close()
+
+	if err := db.Raw().Ping(); err != nil {
+		t.Fatalf("SQLite ping error = %v", err)
 	}
 }

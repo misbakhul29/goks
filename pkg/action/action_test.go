@@ -93,6 +93,57 @@ func TestAction_CrossOrigin_Rejected(t *testing.T) {
 	}
 }
 
+func TestAction_OriginMustMatchExactHost(t *testing.T) {
+	tests := []struct {
+		name   string
+		origin string
+		want   int
+	}{
+		{name: "same origin", origin: "http://localhost:3000", want: http.StatusOK},
+		{name: "host suffix attack", origin: "http://localhost:3000.evil.example", want: http.StatusForbidden},
+		{name: "scheme mismatch", origin: "https://localhost:3000", want: http.StatusForbidden},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			form := url.Values{}
+			form.Set("name", "Origin check")
+
+			req := httptest.NewRequest(http.MethodPost, "http://localhost:3000/__goks_action?name=createItem", strings.NewReader(form.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			req.Header.Set("Origin", tt.origin)
+			req.Header.Set("X-GoKS-Action", "1")
+
+			rec := httptest.NewRecorder()
+			handler := action.Handler()
+			handler.ServeHTTP(rec, req)
+
+			if rec.Code != tt.want {
+				t.Fatalf("expected status %d, got %d: %s", tt.want, rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestAction_ExternalRedirectIsRejected(t *testing.T) {
+	form := url.Values{}
+	form.Set("name", "createItem")
+
+	req := httptest.NewRequest(http.MethodPost, "/__goks_action?name=createItem&redirect=https://evil.example/account", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Host = "localhost:3000"
+
+	rec := httptest.NewRecorder()
+	action.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("expected 303 See Other, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if location := rec.Header().Get("Location"); location != "/" {
+		t.Fatalf("expected unsafe redirect to fall back to '/', got %q", location)
+	}
+}
+
 func TestAction_NotFound(t *testing.T) {
 	handler := action.Handler()
 

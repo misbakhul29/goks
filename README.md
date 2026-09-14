@@ -7,13 +7,13 @@ JavaScript. GoKS combines the ergonomics of React/Next.js with the performance
 and single-binary deployment of Go, making it ideal for building microservices, 
 APIs, and progressive web applications.
 
-**Key Technologies:** Go 1.22+, WebAssembly (WASM), TinyGo, Tailwind CSS v4, 
+**Key Technologies:** Go 1.26.6+, WebAssembly (WASM), TinyGo, Tailwind CSS v4,
 SQLite, PostgreSQL, MySQL, Server Actions.
 
 <div align="center">
 
-[![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?style=for-the-badge&logo=go&logoColor=white)](https://golang.org)
-[![Release](https://img.shields.io/badge/release-v0.15.0-6366F1?style=for-the-badge&logo=github)](https://github.com/misbakhul29/goks/releases)
+[![Go Version](https://img.shields.io/badge/Go-1.26.6+-00ADD8?style=for-the-badge&logo=go&logoColor=white)](https://golang.org)
+[![Release](https://img.shields.io/badge/release-v0.16.0-6366F1?style=for-the-badge&logo=github)](https://github.com/misbakhul29/goks/releases)
 [![License](https://img.shields.io/badge/license-MIT-10B981?style=for-the-badge)](LICENSE)
 [![WASM](https://img.shields.io/badge/WebAssembly-Enabled-654FF0?style=for-the-badge&logo=webassembly&logoColor=white)](https://webassembly.org)
 [![Tailwind](https://img.shields.io/badge/Tailwind_CSS-v4-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
@@ -777,7 +777,7 @@ PORT=80 /opt/myapp/server
 
 ```dockerfile
 # Build stage
-FROM golang:1.22-alpine AS builder
+FROM golang:1.26-alpine AS builder
 WORKDIR /app
 RUN apk add --no-cache curl
 RUN go install github.com/misbakhul29/goks@latest
@@ -812,7 +812,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.26.6'
 
       - name: Install GoKS
         run: go install github.com/misbakhul29/goks@latest

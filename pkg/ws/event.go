@@ -3,6 +3,7 @@ package ws
 import (
 	"encoding/json"
 	"log"
+	"sync"
 )
 
 // EventMessage is the standard JSON structure for typed WebSocket events.
@@ -18,8 +19,9 @@ type EventHandler func(client *Client, data json.RawMessage)
 // EventHub extends Hub with typed event routing.
 type EventHub struct {
 	*Hub
-	handlers map[string]EventHandler
-	rooms    *RoomManager
+	handlers   map[string]EventHandler
+	rooms      *RoomManager
+	handlersMu sync.RWMutex
 }
 
 // NewEventHub creates a new event-driven WebSocket hub.
@@ -29,6 +31,7 @@ func NewEventHub() *EventHub {
 		handlers: make(map[string]EventHandler),
 		rooms:    NewRoomManager(),
 	}
+	h.Hub.onDisconnect = h.LeaveAll
 	// Wire up the low-level OnMessage to our event router
 	h.Hub.OnMessage(func(client *Client, msg []byte) {
 		var ev EventMessage
@@ -51,12 +54,16 @@ func NewEventHub() *EventHub {
 //	    hub.BroadcastEvent("chat.message", msg)
 //	})
 func (h *EventHub) On(event string, handler EventHandler) {
+	h.handlersMu.Lock()
+	defer h.handlersMu.Unlock()
 	h.handlers[event] = handler
 }
 
 // dispatch routes an incoming event to its registered handler.
 func (h *EventHub) dispatch(client *Client, ev EventMessage) {
+	h.handlersMu.RLock()
 	handler, ok := h.handlers[ev.Event]
+	h.handlersMu.RUnlock()
 	if !ok {
 		log.Printf("[GoKS/ws] no handler for event %q", ev.Event)
 		return

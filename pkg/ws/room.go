@@ -82,11 +82,8 @@ func (rm *RoomManager) Broadcast(roomName string, msg []byte) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for client := range r.clients {
-		select {
-		case client.send <- msg:
-		default:
-			// Drop the message if the client's buffer is full
-		}
+		// Drop the message if the client's buffer is full or disconnected.
+		_ = client.enqueue(msg)
 	}
 }
 
