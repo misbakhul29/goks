@@ -30,6 +30,11 @@ func BuildCmd() *cobra.Command {
 				return fmt.Errorf("folder 'app/' tidak ditemukan di %s — pastikan kamu berada di dalam folder project GoKS sebelum menjalankan 'goks build'", cwd)
 			}
 
+			compilerType = strings.ToLower(strings.TrimSpace(compilerType))
+			if compilerType != "go" && compilerType != "tinygo" {
+				return fmt.Errorf("invalid --compiler flag %q: supported values are 'go' (default) and 'tinygo'", compilerType)
+			}
+
 			if standalone {
 				fmt.Println(color.CyanString("\n  📦 GoKS Standalone Build"))
 			} else {
@@ -67,7 +72,9 @@ func BuildCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			copyFile(wasmExec, filepath.Join(goksBuildDir, "wasm_exec.js"))
+			if err := copyFile(wasmExec, filepath.Join(goksBuildDir, "wasm_exec.js")); err != nil {
+				return fmt.Errorf("failed to copy wasm_exec.js: %w", err)
+			}
 
 			if standalone {
 				// Build standalone binary with embedded assets
@@ -105,16 +112,19 @@ func BuildCmd() *cobra.Command {
 func locateWasmExec(compilerType string) (string, error) {
 	if compilerType == "tinygo" {
 		tinyBin, err := ensureTinyGo()
-		if err == nil {
-			out, err := exec.Command(tinyBin, "env", "TINYGOROOT").Output()
-			if err == nil {
-				tinyRoot := strings.TrimSpace(string(out))
-				candidate := filepath.Join(tinyRoot, "targets", "wasm_exec.js")
-				if _, err := os.Stat(candidate); err == nil {
-					return candidate, nil
-				}
-			}
+		if err != nil {
+			return "", fmt.Errorf("tinygo compiler not available: %w", err)
 		}
+		out, err := exec.Command(tinyBin, "env", "TINYGOROOT").Output()
+		if err != nil {
+			return "", fmt.Errorf("failed to query TINYGOROOT from %s: %w", tinyBin, err)
+		}
+		tinyRoot := strings.TrimSpace(string(out))
+		candidate := filepath.Join(tinyRoot, "targets", "wasm_exec.js")
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		}
+		return "", fmt.Errorf("wasm_exec.js not found in TINYGOROOT: %s", tinyRoot)
 	}
 
 	goRoot := os.Getenv("GOROOT")

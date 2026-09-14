@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -43,6 +44,11 @@ func DevCmd() *cobra.Command {
 		Use:   "dev",
 		Short: "Start the GoKS development server with hot reload",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			compilerType = strings.ToLower(strings.TrimSpace(compilerType))
+			if compilerType != "go" && compilerType != "tinygo" {
+				return fmt.Errorf("invalid --compiler flag %q: supported values are 'go' (default) and 'tinygo'", compilerType)
+			}
+
 			if appDir == "" {
 				appDir, _ = os.Getwd()
 			}
@@ -276,8 +282,12 @@ func compileWasmAndServer(appDir, compilerType string) ([]byte, error) {
 	}
 	
 	// Copy wasm_exec.js for the selected compiler
-	if wasmExec, err := locateWasmExec(compilerType); err == nil {
-		_ = copyFile(wasmExec, filepath.Join(outDir, "wasm_exec.js"))
+	wasmExec, err := locateWasmExec(compilerType)
+	if err != nil {
+		return []byte(err.Error()), err
+	}
+	if err := copyFile(wasmExec, filepath.Join(outDir, "wasm_exec.js")); err != nil {
+		return []byte(err.Error()), err
 	}
 
 	// Compile Server
