@@ -319,3 +319,43 @@ func TestRenderToString_ConcurrentIsolation(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+func TestReconcileChildren(t *testing.T) {
+	oldCh := []*component.Node{
+		component.H("h1", nil, component.Text("Title")),
+		component.H("p", nil, component.Text("Old Paragraph")),
+		component.H("div", nil, component.Text("Extra 1")),
+		component.H("div", nil, component.Text("Extra 2")),
+	}
+
+	newCh := []*component.Node{
+		component.H("h1", nil, component.Text("Title")),
+		component.H("p", nil, component.Text("New Paragraph")),
+	}
+
+	patches := component.ReconcileChildren(oldCh, newCh)
+	// Expect text update on p (index 1) and removes on indices 2 and 3
+	foundText := false
+	removes := 0
+	for _, p := range patches {
+		if p.Type == component.PatchText {
+			foundText = true
+			if len(p.Path) != 1 || p.Path[0] != 1 {
+				t.Errorf("expected text patch Path to be [1] (child of p at index 1), got %v", p.Path)
+			}
+		}
+		if p.Type == component.PatchRemove {
+			removes++
+			if len(p.Path) != 0 {
+				t.Errorf("expected remove patch Path to be empty []int{}, got %v", p.Path)
+			}
+		}
+	}
+
+	if !foundText {
+		t.Errorf("expected text update patch, got none")
+	}
+	if removes != 2 {
+		t.Errorf("expected 2 remove patches, got %d", removes)
+	}
+}

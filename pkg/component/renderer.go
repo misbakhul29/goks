@@ -7,6 +7,7 @@ package component
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"syscall/js"
 )
@@ -125,27 +126,17 @@ func (r *Renderer) renderDocument(newTree *Node) {
 			container = bodyEl
 		}
 
-		virtualContainer := &Node{
-			Type:     NodeTypeElement,
-			Tag:      "div",
-			Children: bodyNode.Children,
-		}
-
-		var oldVirtualContainer *Node
+		var oldBodyChildren []*Node
 		if r.current != nil {
 			for _, ch := range r.current.Children {
 				if ch.Tag == "body" {
-					oldVirtualContainer = &Node{
-						Type:     NodeTypeElement,
-						Tag:      "div",
-						Children: ch.Children,
-					}
+					oldBodyChildren = ch.Children
 					break
 				}
 			}
 		}
 
-		if oldVirtualContainer == nil {
+		if oldBodyChildren == nil {
 			// Initial mount: populate container
 			container.Set("innerHTML", "")
 			for _, ch := range bodyNode.Children {
@@ -153,8 +144,8 @@ func (r *Renderer) renderDocument(newTree *Node) {
 			}
 		} else {
 			// Incremental diff & patch
-			patches := Reconcile(oldVirtualContainer, virtualContainer)
-			r.applyPatches(container, patches, oldVirtualContainer, virtualContainer)
+			patches := ReconcileChildren(oldBodyChildren, bodyNode.Children)
+			r.applyPatches(container, patches, nil, nil)
 		}
 	}
 
@@ -281,8 +272,11 @@ func (r *Renderer) applyProps(el js.Value, newProps, oldProps Props) {
 			listeners[event] = jsFn
 			el.Call("addEventListener", event, jsFn)
 		} else if k == "value" {
-			el.Set("value", fmt.Sprintf("%v", v))
-			el.Call("setAttribute", k, fmt.Sprintf("%v", v))
+			valStr := fmt.Sprintf("%v", v)
+			if el.Get("value").String() != valStr {
+				el.Set("value", valStr)
+			}
+			el.Call("setAttribute", k, valStr)
 		} else if k == "class" {
 			el.Set("className", fmt.Sprintf("%v", v))
 		} else if k == "style" {
@@ -297,13 +291,58 @@ func (r *Renderer) applyProps(el js.Value, newProps, oldProps Props) {
 
 // applyPatches applies a list of patches to the real DOM.
 func (r *Renderer) applyPatches(parent js.Value, patches []Patch, oldTree, newTree *Node) {
+	if parent.IsUndefined() || parent.IsNull() {
+		return
+	}
+
+	// Stable ordering: updates/replaces first, then removes (descending index), then creates
+	var inPlacePatches []Patch
+	var removePatches []Patch
+	var createPatches []Patch
+
 	for _, p := range patches {
+		switch p.Type {
+		case PatchRemove:
+			removePatches = append(removePatches, p)
+		case PatchCreate:
+			createPatches = append(createPatches, p)
+		default:
+			inPlacePatches = append(inPlacePatches, p)
+		}
+	}
+
+	// Sort removePatches descending by Index so deletions don't shift earlier indices
+	sort.SliceStable(removePatches, func(i, j int) bool {
+		return removePatches[i].Index > removePatches[j].Index
+	})
+
+	orderedPatches := make([]Patch, 0, len(patches))
+	orderedPatches = append(orderedPatches, inPlacePatches...)
+	orderedPatches = append(orderedPatches, removePatches...)
+	orderedPatches = append(orderedPatches, createPatches...)
+
+	for _, p := range orderedPatches {
 		targetParent := parent
 		for _, idx := range p.Path {
-			targetParent = targetParent.Get("childNodes").Index(idx)
+			if targetParent.IsUndefined() || targetParent.IsNull() {
+				break
+			}
+			childNodes := targetParent.Get("childNodes")
+			if childNodes.IsUndefined() || childNodes.IsNull() || idx >= childNodes.Length() {
+				targetParent = js.Undefined()
+				break
+			}
+			targetParent = childNodes.Index(idx)
+		}
+
+		if targetParent.IsUndefined() || targetParent.IsNull() {
+			continue
 		}
 
 		children := targetParent.Get("childNodes")
+		if children.IsUndefined() || children.IsNull() {
+			continue
+		}
 
 		switch p.Type {
 		case PatchCreate:

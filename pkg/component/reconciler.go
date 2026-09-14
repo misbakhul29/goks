@@ -34,6 +34,14 @@ func Reconcile(old, new *Node) []Patch {
 	return patches
 }
 
+// ReconcileChildren computes the minimal set of patches to transform oldCh into newCh
+// when both are direct children of a parent container.
+func ReconcileChildren(oldCh, newCh []*Node) []Patch {
+	var patches []Patch
+	diffChildren(&patches, oldCh, newCh, []int{})
+	return patches
+}
+
 func diff(patches *[]Patch, old, new *Node, path []int, index int) {
 	// Optimization: If it's the exact same pointer (and not nil), skip diffing entirely
 	if old != nil && old == new {
