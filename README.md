@@ -13,7 +13,7 @@ SQLite, PostgreSQL, MySQL, Server Actions.
 <div align="center">
 
 [![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?style=for-the-badge&logo=go&logoColor=white)](https://golang.org)
-[![Release](https://img.shields.io/badge/release-v0.13.0-6366F1?style=for-the-badge&logo=github)](https://github.com/misbakhul29/goks/releases)
+[![Release](https://img.shields.io/badge/release-v0.14.0-6366F1?style=for-the-badge&logo=github)](https://github.com/misbakhul29/goks/releases)
 [![License](https://img.shields.io/badge/license-MIT-10B981?style=for-the-badge)](LICENSE)
 [![WASM](https://img.shields.io/badge/WebAssembly-Enabled-654FF0?style=for-the-badge&logo=webassembly&logoColor=white)](https://webassembly.org)
 [![Tailwind](https://img.shields.io/badge/Tailwind_CSS-v4-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
@@ -21,7 +21,7 @@ SQLite, PostgreSQL, MySQL, Server Actions.
 **The Modern Fullstack Go Web Framework.**  
 *Backend APIs + WebAssembly Frontend, 100% Type-Safe Go. Zero Node.js or JavaScript Required.*
 
-[Getting Started](#-quick-start) • [Features](#-features) • [Why GoKS?](#-why-goks) • [UI Components](#-goks-ui-component-system) • [DevTools](#-goks-studio--embedded-devtools-goks-studio) • [Image Optimizer](#-image-optimizer--component-uiimage) • [API Routes](#-file-based-api-route-handlers) • [Database Migrations](#-database-migrations-cli-goks-db) • [Deployment](#-deployment-guide)
+[Getting Started](#-quick-start) • [Features](#-features) • [Why GoKS?](#-why-goks) • [UI Components](#-goks-ui-component-system) • [Streaming SSR](#-streaming-ssr--suspense-componentsuspense) • [DevTools](#-goks-studio--embedded-devtools-goks-studio) • [Image Optimizer](#-image-optimizer--component-uiimage) • [API Routes](#-file-based-api-route-handlers) • [Database Migrations](#-database-migrations-cli-goks-db) • [Deployment](#-deployment-guide)
 
 </div>
 
@@ -36,6 +36,7 @@ GoKS bridges the gap between modern React/Next.js developer ergonomics and the l
 | **Language Stack** | **100% Go** (Fullstack) | TypeScript / JS | Go + HTML Attributes | Go (Backend Only) |
 | **Frontend Runtime** | **WebAssembly (Go)** | JS Virtual DOM | Browser Native / DOM swap | None / Raw Templates |
 | **Node.js / npm Required?** | **❌ No (Zero npm)** | ✅ Required | ❌ No | ❌ No |
+| **Streaming SSR & Suspense** | **✅ Built-in (`component.Suspense`)** | ✅ React 18 Suspense | ❌ None | ❌ None |
 | **File-Based API Routes** | **✅ Built-in (`app/api/**/route.go`)** | ✅ Yes | ❌ No | ❌ Manual |
 | **Image Optimizer** | **✅ Built-in (`<ui.Image />` / `pkg/image`)** | ✅ `next/image` | ❌ None | ❌ None |
 | **Database Migrations** | **✅ Built-in (`goks db`)** | ⚠️ Prisma / Drizzle | ⚠️ Goose / Migrate | ❌ None |
@@ -51,6 +52,7 @@ GoKS bridges the gap between modern React/Next.js developer ergonomics and the l
 ## ✨ Features
 
 - **🚀 GOX Syntax (`.gox`):** Declarative, JSX-like markup directly inside Go (`<div><h1>{title}</h1></div>`, `<ui.Button />`). Compiled directly into Go code in an isolated workspace.
+- **🌊 Streaming SSR & Suspense (`component.Suspense`):** Out-of-order streaming server-side rendering over chunked HTTP transfer encoding. Send the fast HTML shell immediately while slow asynchronous database queries or external API calls resolve in parallel in Go goroutines, progressively replacing loading skeleton fallbacks via native zero-dependency `<template>` DOM swaps.
 - **🛠️ GoKS Studio / Embedded DevTools (`/__goks` / `goks studio`):** Built-in development dashboard to inspect discovered routes (Pages & REST APIs), browse database tables and schemas, monitor registered Server Actions & RPC methods, view migration statuses, and track live runtime memory/goroutine metrics. Automatically disabled in production with zero data leakage.
 - **🖼️ Image Optimizer & Component (`<ui.Image />` / `pkg/image`):** Automatic on-demand image resizing, high-performance pure Go bilinear interpolation, responsive `srcset` generation, `304 Not Modified` ETag caching, and layout shift (CLS) prevention.
 - **🗄️ Database Migrations CLI (`goks db`):** Full database lifecycle management (`make:migration`, `migrate`, `rollback`, `status`, `seed`) supporting SQLite, PostgreSQL, and MySQL with transactional atomicity and batch rollbacks.
@@ -252,6 +254,72 @@ goks ui add all
 | `dropdown` | `components/ui/dropdown.gox` | Dropdown action menu with items and divider elements |
 | `table` | `components/ui/table.gox` | Responsive data table with styled header, alternating rows, and hover highlights |
 | `image` | `components/ui/image.gox` | Responsive, optimized image with layout shift protection (CLS) and on-demand resizing |
+
+---
+
+## 🌊 Streaming SSR & Suspense (`component.Suspense`)
+
+GoKS provides built-in out-of-order **Streaming Server-Side Rendering (Streaming SSR)** inspired by React 18 Suspense, powered natively by Go goroutines, `Transfer-Encoding: chunked`, and zero-dependency `<template>` DOM swaps.
+
+Instead of blocking the entire page response until slow database queries or upstream microservices finish, GoKS immediately streams the HTML shell with fallback skeletons. As goroutines resolve their asynchronous tasks, replacement chunks are flushed over the persistent HTTP connection and swapped into the DOM instantly.
+
+### Usage Example:
+```go
+package page
+
+import (
+	"context"
+	"time"
+
+	"github.com/misbakhul29/goks/pkg/component"
+)
+
+func ProfilePage() *component.Node {
+	return component.H("div", component.Props{"class": "max-w-xl mx-auto p-6"},
+		component.H("h1", component.Props{"class": "text-2xl font-bold mb-4"}, 
+			component.Text("User Account"),
+		),
+
+		// Suspense boundary with asynchronous resolver
+		component.Suspense(component.SuspenseProps{
+			Fallback: component.H("div", component.Props{"class": "animate-pulse space-y-3"},
+				component.H("div", component.Props{"class": "h-4 bg-zinc-800 rounded w-3/4"}),
+				component.H("div", component.Props{"class": "h-4 bg-zinc-800 rounded w-1/2"}),
+			),
+			Async: func(ctx context.Context) (*component.Node, error) {
+				// Simulating slow database query or external API
+				time.Sleep(150 * time.Millisecond)
+				
+				return component.H("div", component.Props{"class": "p-4 bg-zinc-900 border border-zinc-800 rounded-lg"},
+					component.H("h2", component.Props{"class": "text-lg font-semibold text-indigo-400"}, 
+						component.Text("Alex Mercer"),
+					),
+					component.H("p", component.Props{"class": "text-sm text-zinc-400"}, 
+						component.Text("alex@goks.dev • Pro Tier"),
+					),
+				), nil
+			},
+		}),
+	)
+}
+```
+
+### Streaming Route Handler (`c.StreamHTML`):
+```go
+func GET(c *router.Context) error {
+	return c.StreamHTML(func(w io.Writer, flusher http.Flusher) error {
+		_, err := component.RenderToStream(c.Request().Context(), w, flusher, ProfilePage())
+		return err
+	})
+}
+```
+
+### How It Works Under The Hood:
+1. **Instant TTFB**: Initial HTML shell arrives in single-digit milliseconds with `<div id="goks-s-1" data-goks-suspense="pending">...skeleton...</div>`.
+2. **Concurrent Goroutines**: Each `Async` resolver runs concurrently in isolated Go goroutines respecting `context.Context` request lifecycles.
+3. **Chunked Streaming**: When a task completes, a `<template id="goks-c-1">` chunk containing the resolved HTML and a lightweight 2-line inline DOM swap script is flushed.
+4. **Zero Client Runtime**: Requires no heavy client-side JavaScript framework. Native browser DOM APIs (`replaceWith`, `cloneNode`) execute the swap seamlessly.
+5. **Progressive Fallback**: If JavaScript is disabled in the browser, the accessible skeleton/fallback remains rendered without broken page states.
 
 ---
 

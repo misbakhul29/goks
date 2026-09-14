@@ -110,6 +110,23 @@ func (c *Context) HTML(html string) error {
 	return err
 }
 
+// StreamHTML sets Content-Type to text/html with chunked transfer encoding,
+// and passes the io.Writer and http.Flusher to streamFunc.
+func (c *Context) StreamHTML(streamFunc func(w io.Writer, flusher http.Flusher) error) error {
+	c.w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	c.w.Header().Set("Transfer-Encoding", "chunked")
+	c.w.Header().Set("X-Content-Type-Options", "nosniff")
+	if !c.written {
+		c.w.WriteHeader(c.status)
+		c.written = true
+	}
+	var flusher http.Flusher
+	if f, ok := c.w.(http.Flusher); ok {
+		flusher = f
+	}
+	return streamFunc(c.w, flusher)
+}
+
 // Redirect performs an HTTP redirect.
 func (c *Context) Redirect(url string, code ...int) error {
 	statusCode := http.StatusFound
