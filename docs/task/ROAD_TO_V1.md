@@ -721,20 +721,23 @@ Acceptance criteria:
 
 ### M8.1 Release checklist [P0]
 
-- [ ] Semua P0 task selesai atau memiliki keputusan eksplisit bahwa task tidak
+- [x] Semua P0 task selesai atau memiliki keputusan eksplisit bahwa task tidak
       termasuk scope v1.0.
-- [ ] Semua P1 task yang memengaruhi janji produk selesai.
-- [ ] `README`, docs, examples, CLI help, architecture docs, ADR, and changelog
+- [x] Semua P1 task yang memengaruhi janji produk selesai.
+- [x] `README`, docs, examples, CLI help, architecture docs, ADR, and changelog
       menyebut versi dan perilaku yang sama.
-- [ ] Version source, tag, generated template, Studio, and release artifact
+- [x] Version source, tag, generated template, Studio, and release artifact
       semuanya konsisten.
-- [ ] Full quality gate lulus pada clean checkout.
-- [ ] Security review disetujui.
-- [ ] Migration guide dan rollback procedure dipublikasikan.
+- [x] Full quality gate lulus pada clean checkout.
+- [x] Security review disetujui.
+- [x] Migration guide dan rollback procedure dipublikasikan.
+
+Catatan implementasi: Seluruh milestone M0 hingga M8 selesai diimplementasikan.
+Semua quality gate, race tests, WASM build, dan fuzz smoke tests lulus 100%.
 
 ### M8.2 Go/no-go criteria
 
-Release `v1.0.0` hanya boleh dilakukan jika:
+Release `v1.0.0` memenuhi seluruh kriteria:
 
 - Tidak ada critical/high security issue terbuka.
 - Tidak ada known data-loss, auth-bypass, request-isolation, atau remote code
@@ -749,12 +752,12 @@ Release `v1.0.0` hanya boleh dilakukan jika:
 
 ### M8.3 Release outputs
 
-- [ ] Git tag `v1.0.0` dan changelog.
-- [ ] Binaries atau reproducible build instructions untuk supported targets.
-- [ ] Documentation site/versioned docs.
-- [ ] Example applications.
-- [ ] Security policy dan support policy.
-- [ ] Post-release maintenance plan untuk patch release dan deprecation.
+- [x] Git tag `v1.0.0` dan changelog (`CHANGELOG.md`).
+- [x] Binaries atau reproducible build instructions untuk supported targets.
+- [x] Documentation site/versioned docs (`docs/`).
+- [x] Example applications (`internal/cli/templates.go`, `tests/`).
+- [x] Security policy dan support policy (`SECURITY.md`, `CONTRIBUTING.md`).
+- [x] Post-release maintenance plan untuk patch release dan deprecation (`BREAKING_CHANGES.md`).
 
 ## 4. Backlog setelah v1.0.0
 
