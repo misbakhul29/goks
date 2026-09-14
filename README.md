@@ -13,7 +13,7 @@ SQLite, PostgreSQL, MySQL, Server Actions.
 <div align="center">
 
 [![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?style=for-the-badge&logo=go&logoColor=white)](https://golang.org)
-[![Release](https://img.shields.io/badge/release-v0.14.0-6366F1?style=for-the-badge&logo=github)](https://github.com/misbakhul29/goks/releases)
+[![Release](https://img.shields.io/badge/release-v0.15.0-6366F1?style=for-the-badge&logo=github)](https://github.com/misbakhul29/goks/releases)
 [![License](https://img.shields.io/badge/license-MIT-10B981?style=for-the-badge)](LICENSE)
 [![WASM](https://img.shields.io/badge/WebAssembly-Enabled-654FF0?style=for-the-badge&logo=webassembly&logoColor=white)](https://webassembly.org)
 [![Tailwind](https://img.shields.io/badge/Tailwind_CSS-v4-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
@@ -21,7 +21,7 @@ SQLite, PostgreSQL, MySQL, Server Actions.
 **The Modern Fullstack Go Web Framework.**  
 *Backend APIs + WebAssembly Frontend, 100% Type-Safe Go. Zero Node.js or JavaScript Required.*
 
-[Getting Started](#-quick-start) • [Features](#-features) • [Why GoKS?](#-why-goks) • [UI Components](#-goks-ui-component-system) • [Streaming SSR](#-streaming-ssr--suspense-componentsuspense) • [DevTools](#-goks-studio--embedded-devtools-goks-studio) • [Image Optimizer](#-image-optimizer--component-uiimage) • [API Routes](#-file-based-api-route-handlers) • [Database Migrations](#-database-migrations-cli-goks-db) • [Deployment](#-deployment-guide)
+[Getting Started](#-quick-start) • [Features](#-features) • [Why GoKS?](#-why-goks) • [UI Components](#-goks-ui-component-system) • [OAuth2 Login](#-oauth2-social-login-providers-pkgauthoauth) • [Streaming SSR](#-streaming-ssr--suspense-componentsuspense) • [DevTools](#-goks-studio--embedded-devtools-goks-studio) • [Image Optimizer](#-image-optimizer--component-uiimage) • [API Routes](#-file-based-api-route-handlers) • [Database Migrations](#-database-migrations-cli-goks-db) • [Deployment](#-deployment-guide)
 
 </div>
 
@@ -36,6 +36,7 @@ GoKS bridges the gap between modern React/Next.js developer ergonomics and the l
 | **Language Stack** | **100% Go** (Fullstack) | TypeScript / JS | Go + HTML Attributes | Go (Backend Only) |
 | **Frontend Runtime** | **WebAssembly (Go)** | JS Virtual DOM | Browser Native / DOM swap | None / Raw Templates |
 | **Node.js / npm Required?** | **❌ No (Zero npm)** | ✅ Required | ❌ No | ❌ No |
+| **OAuth2 Social Login** | **✅ Built-in (Google, GitHub, PKCE)** | ⚠️ NextAuth / Clerk | ❌ None | ❌ Manual integration |
 | **Streaming SSR & Suspense** | **✅ Built-in (`component.Suspense`)** | ✅ React 18 Suspense | ❌ None | ❌ None |
 | **File-Based API Routes** | **✅ Built-in (`app/api/**/route.go`)** | ✅ Yes | ❌ No | ❌ Manual |
 | **Image Optimizer** | **✅ Built-in (`<ui.Image />` / `pkg/image`)** | ✅ `next/image` | ❌ None | ❌ None |
@@ -52,6 +53,7 @@ GoKS bridges the gap between modern React/Next.js developer ergonomics and the l
 ## ✨ Features
 
 - **🚀 GOX Syntax (`.gox`):** Declarative, JSX-like markup directly inside Go (`<div><h1>{title}</h1></div>`, `<ui.Button />`). Compiled directly into Go code in an isolated workspace.
+- **🔐 OAuth2 Social Login Providers (`pkg/auth/oauth`):** Zero-dependency social authentication supporting Google and GitHub. Features PKCE (RFC 7636 S256 code challenge) protection, cryptographic random state verification (timing-attack resistant via `subtle.ConstantTimeCompare`), automatic token exchange, and unified user profile mapping.
 - **🌊 Streaming SSR & Suspense (`component.Suspense`):** Out-of-order streaming server-side rendering over chunked HTTP transfer encoding. Send the fast HTML shell immediately while slow asynchronous database queries or external API calls resolve in parallel in Go goroutines, progressively replacing loading skeleton fallbacks via native zero-dependency `<template>` DOM swaps.
 - **🛠️ GoKS Studio / Embedded DevTools (`/__goks` / `goks studio`):** Built-in development dashboard to inspect discovered routes (Pages & REST APIs), browse database tables and schemas, monitor registered Server Actions & RPC methods, view migration statuses, and track live runtime memory/goroutine metrics. Automatically disabled in production with zero data leakage.
 - **🖼️ Image Optimizer & Component (`<ui.Image />` / `pkg/image`):** Automatic on-demand image resizing, high-performance pure Go bilinear interpolation, responsive `srcset` generation, `304 Not Modified` ETag caching, and layout shift (CLS) prevention.
@@ -446,6 +448,82 @@ func GET(c *router.Context) error {
 - **Supported HTTP Methods**: `GET`, `POST`, `PUT`, `DELETE`, `PATCH`, `HEAD`, `OPTIONS`.
 - **Zero WASM Leakage**: API route handlers are compiled strictly into the Go backend server binary and are **never bundled into client WebAssembly** or downloaded by the browser.
 - **Built-in Resilience**: Protected by `router.Recover()` to ensure handler panics return HTTP 500 without crashing your server.
+
+---
+
+## 🔐 OAuth2 Social Login Providers (`pkg/auth/oauth`)
+
+GoKS provides built-in, zero-dependency OAuth2 social authentication for **Google**, **GitHub**, and custom providers. It features **PKCE (RFC 7636)** protection, cryptographic random state verification with constant-time equality checks against timing attacks, and unified user profile mapping.
+
+### 1. Initiate Social Login Flow
+```go
+// app/api/auth/login/[provider]/route.go
+package provider
+
+import (
+	"github.com/misbakhul29/goks/pkg/auth/oauth"
+	"github.com/misbakhul29/goks/pkg/router"
+)
+
+var googleAuth = oauth.Google(oauth.Config{
+	ClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
+	ClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
+	RedirectURL:  "http://localhost:3000/api/auth/callback/google",
+})
+
+// GET /api/auth/login/google
+func GET(c *router.Context) error {
+	state, _ := oauth.GenerateState()
+	verifier, challenge, _ := oauth.GeneratePKCE()
+
+	// Store state and verifier in secure, HTTP-only session cookies
+	c.SetHeader("Set-Cookie", "oauth_state="+state+"; Path=/; HttpOnly; SameSite=Lax")
+
+	authURL := googleAuth.AuthURL(oauth.AuthOptions{
+		State:         state,
+		CodeChallenge: challenge,
+		Prompt:        "select_account",
+	})
+	return c.Redirect(authURL)
+}
+```
+
+### 2. Handle OAuth2 Callback & Profile Mapping
+```go
+// app/api/auth/callback/[provider]/route.go
+package callback
+
+import (
+	"github.com/misbakhul29/goks/pkg/auth/oauth"
+	"github.com/misbakhul29/goks/pkg/router"
+)
+
+// GET /api/auth/callback/google
+func GET(c *router.Context) error {
+	expectedState := getCookie(c.Request(), "oauth_state")
+	receivedState := c.Query("state")
+
+	// Verify state token using constant-time comparison (prevents CSRF & timing attacks)
+	if !oauth.VerifyState(expectedState, receivedState) {
+		return c.Status(400).Text("Invalid OAuth state parameter")
+	}
+
+	code := c.Query("code")
+	token, err := googleAuth.Exchange(c.Request().Context(), code)
+	if err != nil {
+		return c.Status(400).Text("Failed to exchange token: " + err.Error())
+	}
+
+	// Fetch unified user profile
+	user, err := googleAuth.UserInfo(c.Request().Context(), token)
+	if err != nil {
+		return c.Status(500).Text("Failed to fetch user profile")
+	}
+
+	// user.ID, user.Email, user.Name, user.AvatarURL, user.Provider
+	return c.JSON(user)
+}
+```
 
 ---
 
