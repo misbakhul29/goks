@@ -14,6 +14,7 @@ import (
 	"github.com/misbakhul29/goks/pkg/orm"
 	"github.com/misbakhul29/goks/pkg/rbac"
 	"github.com/misbakhul29/goks/pkg/router"
+	"github.com/misbakhul29/goks/pkg/store"
 )
 
 type TestUserModel struct {
@@ -124,4 +125,12 @@ func TestStableAPICompileContract(t *testing.T) {
 	if metaHTML == "" {
 		t.Fatal("expected non-empty rendered metadata")
 	}
+
+	// 8. pkg/store contract
+	st := store.New("initial")
+	if st.Get() != "initial" {
+		t.Fatal("expected store initial value")
+	}
+	unsub := st.Subscribe(func(s string) {})
+	unsub()
 }

@@ -201,15 +201,14 @@ func Expand(n *Node, appRerender func(), currentFiber *FiberNode) *Node {
 		var prevFiber *FiberNode
 		if childFiber != nil {
 			prevFiber = setActiveFiber(childFiber)
+			defer func() {
+				setActiveFiber(prevFiber)
+			}()
 		}
 
 		// Recursively render the component
 		rendered := n.Component.Render()
 		child := Expand(rendered, appRerender, childFiber)
-
-		if childFiber != nil {
-			setActiveFiber(prevFiber)
-		}
 
 		if child != nil {
 			// Attach the component instance to the resulting element for lifecycle hooks

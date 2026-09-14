@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -108,6 +109,43 @@ func TranspileDir(dir string) error {
 	})
 }
 
+// CompileError represents a compilation error mapped directly to the .gox source file.
+type CompileError struct {
+	File    string
+	Line    int
+	Column  int
+	Snippet string
+	Message string
+}
+
+func (e *CompileError) Error() string {
+	var sb strings.Builder
+	if e.File != "" {
+		fmt.Fprintf(&sb, "%s:%d:%d: compile error: %s", e.File, e.Line, e.Column, e.Message)
+	} else if e.Line > 0 {
+		fmt.Fprintf(&sb, "line %d:%d: compile error: %s", e.Line, e.Column, e.Message)
+	} else {
+		fmt.Fprintf(&sb, "compile error: %s", e.Message)
+	}
+	if e.Snippet != "" {
+		sb.WriteString("\n" + e.Snippet)
+	}
+	return sb.String()
+}
+
+func createSnippet(content string, line int, col int) string {
+	lines := strings.Split(content, "\n")
+	if line < 1 || line > len(lines) {
+		return ""
+	}
+	srcLine := lines[line-1]
+	if col < 1 {
+		col = 1
+	}
+	caret := strings.Repeat(" ", col-1) + "^"
+	return fmt.Sprintf("  %d | %s\n    | %s", line, srcLine, caret)
+}
+
 // TranspileFile transpiles a single .gox file into a .go file
 func TranspileFile(goxPath string) error {
 	content, err := os.ReadFile(goxPath)
@@ -115,9 +153,9 @@ func TranspileFile(goxPath string) error {
 		return err
 	}
 
-	transpiled, err := Transpile(string(content))
+	transpiled, err := TranspileWithSource(string(content), goxPath)
 	if err != nil {
-		return fmt.Errorf("failed to transpile %s: %w", goxPath, err)
+		return err
 	}
 
 	outPath := strings.TrimSuffix(goxPath, ".gox") + ".go"
@@ -127,6 +165,12 @@ func TranspileFile(goxPath string) error {
 
 // Transpile converts a .gox string to valid Go component syntax.
 func Transpile(content string) (string, error) {
+	return TranspileWithSource(content, "")
+}
+
+// TranspileWithSource converts a .gox string to valid Go component syntax,
+// attaching file, line, column, and snippet diagnostics if a compilation error occurs.
+func TranspileWithSource(content string, filename string) (string, error) {
 	// Find all `return (` ... `)` blocks
 	idx := 0
 	for {
@@ -152,8 +196,18 @@ func Transpile(content string) (string, error) {
 		}
 
 		if openCount != 0 || end >= len(content) {
-			idx = start + 8
-			continue
+			startLine := strings.Count(content[:start], "\n") + 1
+			col := start - strings.LastIndex(content[:start], "\n")
+			if strings.LastIndex(content[:start], "\n") == -1 {
+				col = start + 1
+			}
+			return "", &CompileError{
+				File:    filename,
+				Line:    startLine,
+				Column:  col,
+				Snippet: createSnippet(content, startLine, col),
+				Message: "unclosed 'return (' block: matching ')' not found",
+			}
 		}
 
 		xmlContent := strings.TrimSpace(content[start+8 : end])
@@ -161,7 +215,22 @@ func Transpile(content string) (string, error) {
 		// Parse XML
 		transpiledXML, err := parseXMLToGo(xmlContent)
 		if err != nil {
-			return "", fmt.Errorf("failed to parse XML: %v\nContent: %s", err, xmlContent)
+			lineInContent := strings.Count(content[:start+8], "\n") + 1
+			colInContent := 1
+			msg := err.Error()
+
+			if xmlErr, ok := err.(*xml.SyntaxError); ok {
+				lineInContent = strings.Count(content[:start+8], "\n") + xmlErr.Line
+				msg = xmlErr.Msg
+			}
+
+			return "", &CompileError{
+				File:    filename,
+				Line:    lineInContent,
+				Column:  colInContent,
+				Snippet: createSnippet(content, lineInContent, colInContent),
+				Message: fmt.Sprintf("failed to parse GOX markup: %s", msg),
+			}
 		}
 
 		// Replace in content
@@ -180,6 +249,17 @@ func Transpile(content string) (string, error) {
 		} else if strings.Contains(content, "package ") {
 			if pkgIdx := strings.Index(content, "\n"); pkgIdx != -1 {
 				content = content[:pkgIdx+1] + "\nimport \"github.com/misbakhul29/goks/pkg/html\"\n" + content[pkgIdx+1:]
+			}
+		}
+	}
+
+	// Auto-inject component import if component package is used and not yet imported
+	if (strings.Contains(content, "component.") || strings.Contains(content, "Fragment(")) && !strings.Contains(content, `"github.com/misbakhul29/goks/pkg/component"`) {
+		if strings.Contains(content, "import (") {
+			content = strings.Replace(content, "import (", "import (\n\t\"github.com/misbakhul29/goks/pkg/component\"", 1)
+		} else if strings.Contains(content, "package ") {
+			if pkgIdx := strings.Index(content, "\n"); pkgIdx != -1 {
+				content = content[:pkgIdx+1] + "\nimport \"github.com/misbakhul29/goks/pkg/component\"\n" + content[pkgIdx+1:]
 			}
 		}
 	}
@@ -257,6 +337,10 @@ func parseXMLToGo(xmlStr string) (string, error) {
 		return "", nil
 	}
 
+	// Normalize shorthand fragments <> and </> to <Fragment> and </Fragment>
+	xmlStr = strings.ReplaceAll(xmlStr, "<>", "<Fragment>")
+	xmlStr = strings.ReplaceAll(xmlStr, "</>", "</Fragment>")
+
 	// Pre-process: replace ={...} attribute expressions with safe placeholders
 	// so the XML decoder doesn't trip over quotes or special chars inside {}.
 	processed, placeholders := extractAttrExprs(xmlStr)
@@ -283,6 +367,10 @@ func parseNode(d *xml.Decoder, placeholders map[string]string) (string, error) {
 		}
 
 		switch token := t.(type) {
+		case xml.Comment:
+			// Safely ignore comments <!-- ... -->
+			continue
+
 		case xml.StartElement:
 			tag := token.Name.Local
 
@@ -336,6 +424,11 @@ func resolveAttrVal(val string, placeholders map[string]string) (string, bool) {
 }
 
 func formatGoNode(tag string, attrs []xml.Attr, inner string, placeholders map[string]string) string {
+	isFragment := strings.EqualFold(tag, "Fragment")
+	if isFragment {
+		return fmt.Sprintf("component.Fragment(%s)", inner)
+	}
+
 	isComponent := strings.Contains(tag, ".")
 
 	var goTag string
@@ -348,6 +441,10 @@ func formatGoNode(tag string, attrs []xml.Attr, inner string, placeholders map[s
 	var res string
 	if isComponent {
 		// Component instantiation: component.C(&c.Hero{Attr1: val, ...})
+		// Deterministic prop ordering
+		sort.Slice(attrs, func(i, j int) bool {
+			return attrs[i].Name.Local < attrs[j].Name.Local
+		})
 		props := []string{}
 		for _, a := range attrs {
 			val := a.Value
@@ -361,6 +458,11 @@ func formatGoNode(tag string, attrs []xml.Attr, inner string, placeholders map[s
 	} else {
 		// HTML element: html.Div(inner)
 		res = fmt.Sprintf("%s(%s)", goTag, inner)
+
+		// Deterministic attribute ordering
+		sort.Slice(attrs, func(i, j int) bool {
+			return attrs[i].Name.Local < attrs[j].Name.Local
+		})
 
 		for _, a := range attrs {
 			name := a.Name.Local
@@ -378,6 +480,12 @@ func formatGoNode(tag string, attrs []xml.Attr, inner string, placeholders map[s
 					res += fmt.Sprintf(`.ID(%s)`, expr)
 				} else {
 					res += fmt.Sprintf(`.ID(%q)`, val)
+				}
+			} else if strings.HasPrefix(strings.ToLower(name), "on") && len(name) > 2 {
+				if isDynamic {
+					res += fmt.Sprintf(`.On(%q, %s)`, name, expr)
+				} else {
+					res += fmt.Sprintf(`.On(%q, %q)`, name, val)
 				}
 			} else {
 				if isDynamic {

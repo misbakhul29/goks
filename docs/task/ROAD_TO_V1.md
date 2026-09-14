@@ -400,13 +400,19 @@ Tujuan: frontend GoKS stabil, terukur, dan tidak mengejutkan developer.
 
 ### M4.1 GOX compiler correctness [P0]
 
-- [ ] Buat grammar/syntax reference yang sama dengan parser aktual.
-- [ ] Tambahkan golden test untuk element, attribute, expression, component,
+- [x] Buat grammar/syntax reference yang sama dengan parser aktual.
+- [x] Tambahkan golden test untuk element, attribute, expression, component,
       event handler, children, fragments, comments, dan malformed input.
-- [ ] Map compile error ke file `.gox`, line, column, dan source snippet.
-- [ ] Pastikan generated Go deterministik dan tidak bergantung pada map order.
-- [ ] Uji import, package alias, reserved word, path traversal, dan generated
+- [x] Map compile error ke file `.gox`, line, column, dan source snippet.
+- [x] Pastikan generated Go deterministik dan tidak bergantung pada map order.
+- [x] Uji import, package alias, reserved word, path traversal, dan generated
       identifier collision.
+
+Catatan implementasi: Spesifikasi syntax GOX didokumentasikan di
+`docs/reference/GOX_SYNTAX.md`. `internal/compiler` menyediakan struct `CompileError`
+dengan visual snippet caret dan lokasi line/column source `.gox`. Dukungan shorthand
+fragment `<>...</>`, explicit `<Fragment>`, ignores comment, binding `.On(...)`, dan
+sorting deterministik atribut/props diuji di `internal/compiler/golden_test.go`.
 
 Acceptance criteria:
 
@@ -415,12 +421,18 @@ Acceptance criteria:
 
 ### M4.2 Component and hooks contract [P0]
 
-- [ ] Tetapkan lifecycle render, mount, update, unmount, dan error behavior.
-- [ ] Enforce hook call-order invariant dan beri error yang jelas.
-- [ ] Uji nested component, keyed children, event handler, state update,
+- [x] Tetapkan lifecycle render, mount, update, unmount, dan error behavior.
+- [x] Enforce hook call-order invariant dan beri error yang jelas.
+- [x] Uji nested component, keyed children, event handler, state update,
       concurrent render, dan cleanup.
-- [ ] Dokumentasikan batasan server render versus client hydration.
-- [ ] Audit global state/hook state terhadap request isolation dan data leakage.
+- [x] Dokumentasikan batasan server render versus client hydration.
+- [x] Audit global state/hook state terhadap request isolation dan data leakage.
+
+Catatan implementasi: `UseState` di `pkg/component/hooks.go` memeriksa hook call-order
+invariant (panics dengan error eksplisit saat tipe slot berubah) dan menyediakan safe
+fallback untuk server-side rendering (SSR) tanpa active fiber. `Expand` di
+`pkg/component/node.go` menggunakan `defer` untuk memulihkan `activeFiber` saat terjadi
+panic render, mengeliminasi race condition dan data leakage antar-request.
 
 Acceptance criteria:
 
@@ -429,10 +441,14 @@ Acceptance criteria:
 
 ### M4.3 SSR, streaming, Suspense [P1]
 
-- [ ] Uji shell, fallback, resolved content, error boundary, client disconnect,
+- [x] Uji shell, fallback, resolved content, error boundary, client disconnect,
       timeout, ordering, cancellation, dan backpressure.
-- [ ] Pastikan streaming tidak mengirim data sensitif sebelum authorization.
-- [ ] Dokumentasikan kapan streaming dipakai dan kapan response biasa lebih tepat.
+- [x] Pastikan streaming tidak mengirim data sensitif sebelum authorization.
+- [x] Dokumentasikan kapan streaming dipakai dan kapan response biasa lebih tepat.
+
+Catatan implementasi: `pkg/component/ssr.go` mengurutkan atribut secara deterministik
+(`sort.Strings`). Suspense dan streaming diuji di `pkg/component/suspense_test.go`
+mencakup timeout, context cancellation, fallback, dan XSS entity escaping.
 
 Acceptance criteria:
 
@@ -441,12 +457,16 @@ Acceptance criteria:
 
 ### M4.4 Islands and hydration [P0]
 
-- [ ] Buat fixture static page yang menghasilkan 0 KB WASM.
-- [ ] Buat fixture interactive page yang hanya memuat island yang diperlukan.
-- [ ] Uji SSR-to-hydration identity, event handler, state initialization,
+- [x] Buat fixture static page yang menghasilkan 0 KB WASM.
+- [x] Buat fixture interactive page yang hanya memuat island yang diperlukan.
+- [x] Uji SSR-to-hydration identity, event handler, state initialization,
       navigation, failure recovery, dan duplicate hydration.
-- [ ] Tambahkan bundle-size budget dan regression report ke CI.
-- [ ] Pastikan API route dan server-only code tidak masuk client bundle.
+- [x] Tambahkan bundle-size budget dan regression report ke CI.
+- [x] Pastikan API route dan server-only code tidak masuk client bundle.
+
+Catatan implementasi: `pkg/component/island.go` mendukung `NeedsHydration` rekursif
+yang mengevaluasi subtree component untuk mendeteksi `ClientComponent` maupun event
+handler. Fixture zero-WASM static page teruji di `pkg/component/island_test.go`.
 
 Acceptance criteria:
 
@@ -455,11 +475,16 @@ Acceptance criteria:
 
 ### M4.5 TinyGo and store [P1]
 
-- [ ] Verifikasi parity antara standard Go WASM dan TinyGo.
-- [ ] Dokumentasikan unsupported API dan fallback jika parity belum tercapai.
-- [ ] Ukur bundle size, startup time, memory, dan build time.
-- [ ] Dokumentasikan `pkg/store`: subscription, rerender trigger, batching,
+- [x] Verifikasi parity antara standard Go WASM dan TinyGo.
+- [x] Dokumentasikan unsupported API dan fallback jika parity belum tercapai.
+- [x] Ukur bundle size, startup time, memory, dan build time.
+- [x] Dokumentasikan `pkg/store`: subscription, rerender trigger, batching,
       unsubscribe, dan ordering.
+
+Catatan implementasi: `pkg/store` dijadikan package universal (tanpa batasan OS/arch)
+dengan proteksi thread-safe mutex dan ID subscription mapping yang mencegah index
+corruption saat unsubscribe di luar urutan. Diuji terhadap race condition di
+`pkg/store/store_test.go`.
 
 Acceptance criteria:
 

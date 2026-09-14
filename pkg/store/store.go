@@ -1,7 +1,4 @@
-//go:build js && wasm
-
-// Package store provides global reactive state management for GoKS WASM apps.
-
+// Package store provides global reactive state management for GoKS.
 package store
 
 import "sync"
@@ -15,14 +12,18 @@ import "sync"
 //	state := CounterStore.Get()
 //	CounterStore.Set(CounterState{Count: state.Count + 1})
 type Store[T any] struct {
-	mu          sync.RWMutex
-	state       T
-	subscribers []func(T)
+	mu        sync.RWMutex
+	state     T
+	listeners map[int]func(T)
+	nextID    int
 }
 
 // New creates a new Store with an initial state.
 func New[T any](initial T) *Store[T] {
-	return &Store[T]{state: initial}
+	return &Store[T]{
+		state:     initial,
+		listeners: make(map[int]func(T)),
+	}
 }
 
 // Get returns the current state (read-only copy).
@@ -36,8 +37,10 @@ func (s *Store[T]) Get() T {
 func (s *Store[T]) Set(newState T) {
 	s.mu.Lock()
 	s.state = newState
-	subs := make([]func(T), len(s.subscribers))
-	copy(subs, s.subscribers)
+	subs := make([]func(T), 0, len(s.listeners))
+	for _, sub := range s.listeners {
+		subs = append(subs, sub)
+	}
 	s.mu.Unlock()
 
 	for _, sub := range subs {
@@ -56,8 +59,10 @@ func (s *Store[T]) Update(fn func(T) T) {
 	s.mu.Lock()
 	s.state = fn(s.state)
 	newState := s.state
-	subs := make([]func(T), len(s.subscribers))
-	copy(subs, s.subscribers)
+	subs := make([]func(T), 0, len(s.listeners))
+	for _, sub := range s.listeners {
+		subs = append(subs, sub)
+	}
 	s.mu.Unlock()
 
 	for _, sub := range subs {
@@ -69,13 +74,14 @@ func (s *Store[T]) Update(fn func(T) T) {
 // Returns an unsubscribe function.
 func (s *Store[T]) Subscribe(fn func(T)) func() {
 	s.mu.Lock()
-	s.subscribers = append(s.subscribers, fn)
-	idx := len(s.subscribers) - 1
+	id := s.nextID
+	s.nextID++
+	s.listeners[id] = fn
 	s.mu.Unlock()
 
 	return func() {
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		s.subscribers = append(s.subscribers[:idx], s.subscribers[idx+1:]...)
+		delete(s.listeners, id)
 	}
 }
