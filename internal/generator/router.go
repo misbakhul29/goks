@@ -151,7 +151,7 @@ func getGoKSVersion() string {
 			return info.Main.Version
 		}
 	}
-	return "v0.8.2"
+	return "v0.9.0"
 }
 
 func writeEntryGoMod(entryDir, appDir, moduleName string) error {
@@ -259,6 +259,10 @@ type AppRouter struct {
 
 func (r *AppRouter) HasMatchedPage(path string) bool {
 	return router.MatchAnyRoute(registeredPageRoutes, path)
+}
+
+func (r *AppRouter) PageRoutes() []string {
+	return registeredPageRoutes
 }
 
 func (r *AppRouter) Render() *component.Node {
@@ -541,6 +545,12 @@ import (
 func main() {
 %s
 	srv := server.NewDev(cfg)
+	if exportDir := os.Getenv("GOKS_EXPORT_DIR"); exportDir != "" {
+		if err := srv.ExportStatic(exportDir); err != nil {
+			log.Fatalf("[GoKS] Static export failed: %%v", err)
+		}
+		return
+	}
 	log.Fatal(srv.Start())
 }
 `, imports, configInit)

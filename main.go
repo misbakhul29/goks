@@ -36,6 +36,7 @@ func main() {
 		cli.GenerateCmd(),
 		cli.PageCmd(),
 		cli.UICmd(),
+		cli.ExportCmd(),
 		cli.LSPCmd(),
 		versionCmd(),
 	)
@@ -51,7 +52,7 @@ func versionCmd() *cobra.Command {
 		Use:   "version",
 		Short: "Print the GoKS version",
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Println(color.CyanString("GoKS") + " v0.8.2")
+			fmt.Println(color.CyanString("GoKS") + " v0.9.0")
 		},
 	}
 }

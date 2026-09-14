@@ -5,10 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"mime"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -594,4 +596,146 @@ func shellHTML(liveReloadScript, envScript, ssrContent string) string {
   ` + liveReloadScript + `
 </body>
 </html>`
+}
+
+// ExportStatic pre-renders all discoverable pages to static HTML files and copies
+// static assets into exportDir, producing a 100% self-contained static site.
+func (s *DevServer) ExportStatic(exportDir string) error {
+	s.setupRoutes()
+
+	cleanExport, err := filepath.Abs(filepath.Clean(exportDir))
+	if err != nil {
+		return fmt.Errorf("invalid export directory path: %w", err)
+	}
+
+	if err := os.MkdirAll(cleanExport, 0755); err != nil {
+		return fmt.Errorf("failed to create export directory: %w", err)
+	}
+
+	// 1. Discover all routes
+	var routes []string
+	if r, ok := s.cfg.Root.(interface{ PageRoutes() []string }); ok {
+		routes = r.PageRoutes()
+	} else {
+		routes = []string{"/"}
+	}
+
+	fmt.Printf("\n  📦 Exporting %d routes to %s\n", len(routes), cleanExport)
+
+	for _, route := range routes {
+		// Skip dynamic routes with unresolved parameters (e.g. /:id) for static export
+		if strings.Contains(route, "/:") || strings.Contains(route, "/_") {
+			fmt.Printf("  ⚠️  Skipping dynamic route %s (requires dynamic server or static params)\n", route)
+			continue
+		}
+
+		req := httptest.NewRequest("GET", route, nil)
+		rec := httptest.NewRecorder()
+		s.router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			return fmt.Errorf("route %s returned HTTP status %d during static export", route, rec.Code)
+		}
+
+		htmlContent := rec.Body.Bytes()
+
+		// Write to out/<route>/index.html
+		var targetHTML string
+		if route == "/" {
+			targetHTML = filepath.Join(cleanExport, "index.html")
+		} else {
+			cleanRoute := strings.TrimPrefix(route, "/")
+			subDir := filepath.Join(cleanExport, cleanRoute)
+			// Security: verify within cleanExport
+			if !strings.HasPrefix(filepath.Clean(subDir), cleanExport+string(os.PathSeparator)) {
+				return fmt.Errorf("security violation: illegal path for route %s", route)
+			}
+			if err := os.MkdirAll(subDir, 0755); err != nil {
+				return err
+			}
+			targetHTML = filepath.Join(subDir, "index.html")
+
+			// Also write clean-URL route.html (e.g., out/about.html)
+			cleanHTMLPath := filepath.Clean(filepath.Join(cleanExport, cleanRoute+".html"))
+			if strings.HasPrefix(cleanHTMLPath, cleanExport+string(os.PathSeparator)) {
+				_ = os.WriteFile(cleanHTMLPath, htmlContent, 0644)
+			}
+		}
+
+		if err := os.WriteFile(targetHTML, htmlContent, 0644); err != nil {
+			return fmt.Errorf("failed to write %s: %w", targetHTML, err)
+		}
+
+		relTarget, _ := filepath.Rel(cleanExport, targetHTML)
+		fmt.Printf("  ✓ %-20s → %s\n", route, relTarget)
+	}
+
+	// 2. Export 404 page
+	req404 := httptest.NewRequest("GET", "/__goks_export_404_test__", nil)
+	rec404 := httptest.NewRecorder()
+	s.router.ServeHTTP(rec404, req404)
+	_ = os.WriteFile(filepath.Join(cleanExport, "404.html"), rec404.Body.Bytes(), 0644)
+	fmt.Printf("  ✓ %-20s → 404.html\n", "404 (Not Found)")
+
+	// 3. Copy static build assets (.goks/build/app.css, app.wasm, wasm_exec.js)
+	buildDir := filepath.Join(s.cfg.AppDir, ".goks", "build")
+	assets := []string{"app.css", "app.wasm", "wasm_exec.js"}
+	for _, asset := range assets {
+		src := filepath.Join(buildDir, asset)
+		if _, err := os.Stat(src); err == nil {
+			dst := filepath.Join(cleanExport, asset)
+			if err := copyFile(src, dst); err != nil {
+				return fmt.Errorf("failed to copy %s: %w", asset, err)
+			}
+			fmt.Printf("  ✓ Asset: %s\n", asset)
+		}
+	}
+
+	// 4. Copy public/ directory if exists
+	publicDir := filepath.Join(s.cfg.AppDir, "public")
+	if _, err := os.Stat(publicDir); err == nil {
+		err := filepath.Walk(publicDir, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			rel, err := filepath.Rel(publicDir, path)
+			if err != nil || rel == "." {
+				return nil
+			}
+			// Security check: ensure target path is strictly within cleanExport
+			target := filepath.Clean(filepath.Join(cleanExport, rel))
+			if !strings.HasPrefix(target, cleanExport+string(os.PathSeparator)) {
+				return fmt.Errorf("security violation: path traversal in public directory: %s", rel)
+			}
+
+			if info.IsDir() {
+				return os.MkdirAll(target, 0755)
+			}
+			return copyFile(path, target)
+		})
+		if err != nil {
+			return fmt.Errorf("failed to copy public directory: %w", err)
+		}
+		fmt.Printf("  ✓ Copied public/ directory\n")
+	}
+
+	fmt.Printf("\n  ✨ Static export completed successfully!\n")
+	return nil
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, in)
+	return err
 }

@@ -1,9 +1,19 @@
 # GoKS (Go Kickstart)
 
+**GoKS is a modern, open-source fullstack web framework built entirely in Go.** 
+It enables developers to build fast, type-safe web applications using Go on both 
+backend and frontend (WebAssembly), eliminating the need for Node.js, npm, or 
+JavaScript. GoKS combines the ergonomics of React/Next.js with the performance 
+and single-binary deployment of Go, making it ideal for building microservices, 
+APIs, and progressive web applications.
+
+**Key Technologies:** Go 1.22+, WebAssembly (WASM), TinyGo, Tailwind CSS v4, 
+SQLite, PostgreSQL, MySQL, Server Actions.
+
 <div align="center">
 
 [![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?style=for-the-badge&logo=go&logoColor=white)](https://golang.org)
-[![Release](https://img.shields.io/badge/release-v0.8.2-6366F1?style=for-the-badge&logo=github)](https://github.com/misbakhul29/goks/releases)
+[![Release](https://img.shields.io/badge/release-v0.9.0-6366F1?style=for-the-badge&logo=github)](https://github.com/misbakhul29/goks/releases)
 [![License](https://img.shields.io/badge/license-MIT-10B981?style=for-the-badge)](LICENSE)
 [![WASM](https://img.shields.io/badge/WebAssembly-Enabled-654FF0?style=for-the-badge&logo=webassembly&logoColor=white)](https://webassembly.org)
 [![Tailwind](https://img.shields.io/badge/Tailwind_CSS-v4-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
@@ -349,6 +359,7 @@ Supports **SQLite**, **PostgreSQL**, and **MySQL**.
 | `goks generate model <Name>` | Scaffold an ORM model in `models/<name>.go` |
 | `goks ui list` | List all available UI components |
 | `goks ui add <name... \| all>` | Add styled Tailwind components to `components/ui/` |
+| `goks export [-o out] [--serve]` | Export as 100% static HTML site (SSG) for Cloudflare/GitHub Pages |
 | `goks build [--compiler=tinygo]` | Compile WASM bundle, Tailwind CSS, and production server binary |
 | `goks build --standalone` | Build a **single self-contained binary** with all assets embedded |
 | `goks start [port]` | Run production server (built inside `.goks/build/`) |
@@ -358,14 +369,24 @@ Supports **SQLite**, **PostgreSQL**, and **MySQL**.
 
 ## 🚢 Deployment Guide
 
-GoKS's `--standalone` build embeds all assets (WASM binary, compiled CSS, and public static files) directly into a **single executable binary**.
+### 1. Static Site Hosting (`goks export`) ✨
+Pre-render every route into pure HTML and bundle assets into `out/`:
+```bash
+# Export static website to out/
+goks export
 
+# Preview the static site locally before deploying:
+goks export --serve -p 3000
+```
+Deploy the generated `out/` folder directly to **Cloudflare Pages**, **GitHub Pages**, **Netlify**, or **AWS S3 / CloudFront** for free static hosting with zero server running costs.
+
+### 2. Standalone Binary (`goks build --standalone`)
+Produces a **single binary** at `.goks/standalone/server` with all assets embedded:
 ```bash
 goks build --standalone
-# Output generated at: .goks/standalone/server
 ```
 
-### 1. VPS / Cloud VM (Ubuntu, Debian, etc.)
+#### A. VPS / Cloud VM (Ubuntu, Debian, etc.)
 
 ```bash
 # On your local machine:
@@ -377,7 +398,7 @@ chmod +x /opt/myapp/server
 PORT=80 /opt/myapp/server
 ```
 
-### 2. Docker (Ultra-Minimal Scratch Image, ~15MB)
+#### B. Docker (Ultra-Minimal Scratch Image, ~15MB)
 
 ```dockerfile
 # Build stage
@@ -395,7 +416,7 @@ EXPOSE 3000
 ENTRYPOINT ["/server"]
 ```
 
-### 3. Deploying to Vercel
+#### C. Deploying to Vercel
 
 Because Vercel serverless build images do not come with a Go compiler by default, deploy GoKS to Vercel via **GitHub Actions** using the Vercel CLI:
 
@@ -433,7 +454,7 @@ jobs:
           working-directory: .goks/standalone
 ```
 
-### 4. Railway, Fly.io & Render
+#### D. Railway, Fly.io & Render
 
 For container platforms, simply point them to the Dockerfile above or run the standalone binary directly:
 
