@@ -30,6 +30,7 @@ import (
 	"github.com/misbakhul29/goks/pkg/metadata"
 	"github.com/misbakhul29/goks/pkg/router"
 	"github.com/misbakhul29/goks/pkg/rpc"
+	"github.com/misbakhul29/goks/pkg/studio"
 )
 
 var ssrMutex sync.Mutex
@@ -140,6 +141,21 @@ func (s *DevServer) initRoutes() {
 	if s.cfg.DevMode {
 		s.router.GET("/__goks_livereload", func(ctx *router.Context) error {
 			s.lr.Handler()(ctx.Response(), ctx.Request())
+			return nil
+		})
+
+		// GoKS Studio DevTools Dashboard & APIs
+		studioHandler := studio.New(studio.Config{
+			AppDir:  s.cfg.AppDir,
+			Router:  s.router,
+			DevMode: true,
+		})
+		s.router.GET("/__goks", func(ctx *router.Context) error {
+			studioHandler.ServeHTTP(ctx.Response(), ctx.Request())
+			return nil
+		})
+		s.router.GET("/__goks/*path", func(ctx *router.Context) error {
+			studioHandler.ServeHTTP(ctx.Response(), ctx.Request())
 			return nil
 		})
 	}

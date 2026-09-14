@@ -13,7 +13,7 @@ SQLite, PostgreSQL, MySQL, Server Actions.
 <div align="center">
 
 [![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?style=for-the-badge&logo=go&logoColor=white)](https://golang.org)
-[![Release](https://img.shields.io/badge/release-v0.12.0-6366F1?style=for-the-badge&logo=github)](https://github.com/misbakhul29/goks/releases)
+[![Release](https://img.shields.io/badge/release-v0.13.0-6366F1?style=for-the-badge&logo=github)](https://github.com/misbakhul29/goks/releases)
 [![License](https://img.shields.io/badge/license-MIT-10B981?style=for-the-badge)](LICENSE)
 [![WASM](https://img.shields.io/badge/WebAssembly-Enabled-654FF0?style=for-the-badge&logo=webassembly&logoColor=white)](https://webassembly.org)
 [![Tailwind](https://img.shields.io/badge/Tailwind_CSS-v4-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
@@ -21,7 +21,7 @@ SQLite, PostgreSQL, MySQL, Server Actions.
 **The Modern Fullstack Go Web Framework.**  
 *Backend APIs + WebAssembly Frontend, 100% Type-Safe Go. Zero Node.js or JavaScript Required.*
 
-[Getting Started](#-quick-start) • [Features](#-features) • [Why GoKS?](#-why-goks) • [UI Components](#-goks-ui-component-system) • [Image Optimizer](#-image-optimizer--component-uiimage) • [API Routes](#-file-based-api-route-handlers) • [Database Migrations](#-database-migrations-cli-goks-db) • [Server Actions](#-progressive-server-actions-pkgaction) • [Deployment](#-deployment-guide)
+[Getting Started](#-quick-start) • [Features](#-features) • [Why GoKS?](#-why-goks) • [UI Components](#-goks-ui-component-system) • [DevTools](#-goks-studio--embedded-devtools-goks-studio) • [Image Optimizer](#-image-optimizer--component-uiimage) • [API Routes](#-file-based-api-route-handlers) • [Database Migrations](#-database-migrations-cli-goks-db) • [Deployment](#-deployment-guide)
 
 </div>
 
@@ -39,6 +39,7 @@ GoKS bridges the gap between modern React/Next.js developer ergonomics and the l
 | **File-Based API Routes** | **✅ Built-in (`app/api/**/route.go`)** | ✅ Yes | ❌ No | ❌ Manual |
 | **Image Optimizer** | **✅ Built-in (`<ui.Image />` / `pkg/image`)** | ✅ `next/image` | ❌ None | ❌ None |
 | **Database Migrations** | **✅ Built-in (`goks db`)** | ⚠️ Prisma / Drizzle | ⚠️ Goose / Migrate | ❌ None |
+| **Embedded DevTools** | **✅ Built-in (`/__goks` / `goks studio`)** | ⚠️ Community extension | ❌ None | ❌ None |
 | **Server Actions** | **✅ Built-in (`pkg/action`)** | ✅ Yes | ⚠️ Partial (HTMX triggers) | ❌ Manual endpoints |
 | **Selective Hydration** | **✅ Islands (0-WASM static)** | ⚠️ Partial (React RSC) | ❌ N/A | ❌ N/A |
 | **Component Generator** | **✅ `goks ui` (shadcn-style)** | ✅ `shadcn/ui` | ❌ None | ❌ None |
@@ -50,6 +51,7 @@ GoKS bridges the gap between modern React/Next.js developer ergonomics and the l
 ## ✨ Features
 
 - **🚀 GOX Syntax (`.gox`):** Declarative, JSX-like markup directly inside Go (`<div><h1>{title}</h1></div>`, `<ui.Button />`). Compiled directly into Go code in an isolated workspace.
+- **🛠️ GoKS Studio / Embedded DevTools (`/__goks` / `goks studio`):** Built-in development dashboard to inspect discovered routes (Pages & REST APIs), browse database tables and schemas, monitor registered Server Actions & RPC methods, view migration statuses, and track live runtime memory/goroutine metrics. Automatically disabled in production with zero data leakage.
 - **🖼️ Image Optimizer & Component (`<ui.Image />` / `pkg/image`):** Automatic on-demand image resizing, high-performance pure Go bilinear interpolation, responsive `srcset` generation, `304 Not Modified` ETag caching, and layout shift (CLS) prevention.
 - **🗄️ Database Migrations CLI (`goks db`):** Full database lifecycle management (`make:migration`, `migrate`, `rollback`, `status`, `seed`) supporting SQLite, PostgreSQL, and MySQL with transactional atomicity and batch rollbacks.
 - **🌐 File-Based API Route Handlers (`app/api/**/route.go`):** Next.js App Router style backend API endpoints. Simply export standard HTTP method functions (`GET`, `POST`, `PUT`, `DELETE`, `PATCH`, `OPTIONS`, `HEAD`) with full path parameters (`:id` or `[id]`), query params, JSON body binding, and automatic recovery. API routes are strictly server-side and never bundled into client WASM.
@@ -545,12 +547,36 @@ goks db seed
 
 ---
 
+## 🛠️ GoKS Studio / Embedded DevTools (`/__goks`)
+
+GoKS includes a built-in interactive developer dashboard to inspect your fullstack application in real-time.
+
+```bash
+# Launch GoKS Studio directly in your browser:
+goks studio
+
+# Or access it automatically while running the dev server:
+goks dev
+# Open: http://localhost:3000/__goks
+```
+
+### Features:
+1. **📊 Real-time Runtime Telemetry**: Live memory allocation, active goroutines, GC cycles, server uptime, and Go runtime environment.
+2. **🗺️ Routes Explorer**: Visual catalog of all Page routes (`app/**/page.gox`) and backend API routes (`app/api/**/route.go`) with HTTP methods (`GET`, `POST`, `PUT`, `DELETE`, `PATCH`).
+3. **🗄️ Database Studio**: Live SQLite/PostgreSQL/MySQL table browser. Inspect schema, column types, total row counts, and browse records with paginated data views.
+4. **⚡ Server Actions & RPC Catalog**: List of registered Server Actions (`pkg/action`) and RPC methods (`pkg/rpc`) with clickable endpoint paths.
+5. **📜 Migrations Monitor**: Track migration files, applied timestamps, and batch numbers.
+6. **🔒 Production-Safe**: GoKS Studio is automatically restricted to development mode (`DevMode: true`). In production builds, all studio endpoints immediately return 404 with zero data leakage.
+
+---
+
 ## ⌨️ CLI Reference
 
 | Command | Description |
 | :--- | :--- |
 | `goks new <app>` | Create a new GoKS application |
 | `goks dev [-p port] [--compiler=tinygo]` | Start development server with hot-reload (default: port 3000) |
+| `goks studio [-p port] [--no-open]` | Launch the embedded GoKS Studio DevTools dashboard |
 | `goks page <route>` | Scaffold a new `.gox` page in `app/<route>/page.gox` |
 | `goks generate page <route>` | Alias to generate a page |
 | `goks generate component <Name>` | Scaffold a reusable component in `app/components/<name>.gox` |

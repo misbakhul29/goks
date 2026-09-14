@@ -167,6 +167,7 @@ func DevCmd() *cobra.Command {
 
 			// 5. Start Reverse Proxy
 			fmt.Println(color.CyanString("  🚀 Starting server at http://localhost:%d", port))
+			fmt.Printf("  %s %s\n\n", color.HiBlackString("🛠️  GoKS Studio:  "), color.CyanString("http://localhost:%d/__goks", port))
 			childURL, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", childPort))
 			proxy := httputil.NewSingleHostReverseProxy(childURL)
 			

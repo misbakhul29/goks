@@ -70,6 +70,27 @@ func (r *Router) DELETE(pattern string, h Handler) { r.Handle("DELETE", pattern,
 // PATCH registers a PATCH route.
 func (r *Router) PATCH(pattern string, h Handler) { r.Handle("PATCH", pattern, h) }
 
+// RouteInfo represents inspectable information about a registered route.
+type RouteInfo struct {
+	Method  string `json:"method"`
+	Pattern string `json:"pattern"`
+}
+
+// Routes returns a copy of all registered routes for inspection (e.g. by DevTools / Studio).
+func (r *Router) Routes() []RouteInfo {
+	if r == nil {
+		return nil
+	}
+	res := make([]RouteInfo, 0, len(r.routes))
+	for _, rt := range r.routes {
+		res = append(res, RouteInfo{
+			Method:  rt.method,
+			Pattern: rt.pattern,
+		})
+	}
+	return res
+}
+
 // NotFound registers a custom 404 handler.
 func (r *Router) NotFound(h Handler) { r.notFound = h }
 
