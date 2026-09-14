@@ -307,7 +307,7 @@ func getGoKSVersion() string {
 func writeEntryGoMod(entryDir, appDir, moduleName string) error {
 	content := fmt.Sprintf(`module goks_entry
 
-go 1.22
+go 1.26.6
 
 require %s v0.0.0
 require github.com/misbakhul29/goks %s

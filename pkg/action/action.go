@@ -92,9 +92,9 @@ func Handler() http.HandlerFunc {
 			return
 		}
 
-		// CSRF protection: ensure same-origin if Origin header is present
+		// CSRF protection: ensure same-origin if Origin header is present.
 		origin := r.Header.Get("Origin")
-		if origin != "" && !strings.Contains(origin, r.Host) {
+		if origin != "" && !sameOrigin(r, origin) {
 			http.Error(w, "cross-origin actions not allowed", http.StatusForbidden)
 			return
 		}
@@ -161,6 +161,60 @@ func Handler() http.HandlerFunc {
 			targetURL = "/"
 		}
 
-		http.Redirect(w, r, targetURL, http.StatusSeeOther)
+		http.Redirect(w, r, safeRedirectTarget(targetURL), http.StatusSeeOther)
 	}
+}
+
+func safeRedirectTarget(rawTarget string) string {
+	if rawTarget == "" || strings.ContainsAny(rawTarget, "\r\n\\") {
+		return "/"
+	}
+
+	target, err := url.Parse(rawTarget)
+	if err != nil || target.IsAbs() || target.Host != "" || target.User != nil ||
+		!strings.HasPrefix(target.Path, "/") || strings.HasPrefix(target.Path, "//") {
+		return "/"
+	}
+	return rawTarget
+}
+
+func sameOrigin(r *http.Request, rawOrigin string) bool {
+	origin, err := url.Parse(rawOrigin)
+	if err != nil || origin.Scheme == "" || origin.Host == "" || origin.User != nil ||
+		origin.Path != "" || origin.RawQuery != "" || origin.Fragment != "" {
+		return false
+	}
+
+	requestScheme := "http"
+	if r.TLS != nil {
+		requestScheme = "https"
+	}
+	if r.URL != nil && r.URL.Scheme != "" {
+		requestScheme = strings.ToLower(r.URL.Scheme)
+	}
+	if !strings.EqualFold(origin.Scheme, requestScheme) {
+		return false
+	}
+
+	requestHost := r.Host
+	if requestHost == "" && r.URL != nil {
+		requestHost = r.URL.Host
+	}
+	requestURL, err := url.Parse(requestScheme + "://" + requestHost)
+	if err != nil || requestURL.Host == "" {
+		return false
+	}
+
+	return strings.EqualFold(strings.TrimSuffix(origin.Hostname(), "."), strings.TrimSuffix(requestURL.Hostname(), ".")) &&
+		effectivePort(origin) == effectivePort(requestURL)
+}
+
+func effectivePort(u *url.URL) string {
+	if port := u.Port(); port != "" {
+		return port
+	}
+	if strings.EqualFold(u.Scheme, "https") {
+		return "443"
+	}
+	return "80"
 }

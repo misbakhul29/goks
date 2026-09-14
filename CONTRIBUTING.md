@@ -1,61 +1,63 @@
 # Contributing to GoKS
 
-Thank you for considering a contribution. GoKS aims to be a coherent,
-production-grade fullstack Go framework — please read this before opening a
-PR, and see `AGENTS.md` if you are an AI agent.
+Thank you for your interest in contributing to **GoKS**!
 
-## Before You Start
+GoKS is a production-grade, open-source fullstack web framework built entirely in Go.
 
-1. Read `GOKS_CONSTITUTION.md` and `ARCHITECTURE.md`.
-2. For anything touching public APIs (`pkg/*` exported identifiers) or core
-   architecture, check `docs/adr/` first — there may already be a decision on
-   record, or you may need to write a new ADR.
-3. Search existing issues/roadmap items in `ROADMAP.md` before proposing a
-   new abstraction.
+## 1. Principles & Non-Negotiables
 
-## Development Setup
+Before submitting PRs, please review our core engineering principles:
+
+- **Go First:** No Node.js or npm runtime dependency may be introduced. Tailwind CSS is managed via standalone binaries.
+- **Zero-JS Interactivity:** Client interactivity features must retain usable fallback functionality when JavaScript/WASM is disabled or unavailable.
+- **Public API Stability:** Exported identifiers in `pkg/*` represent public contracts. Breaking changes require an ADR and migration guide.
+- **Test Coverage:** Every bug fix or feature must include unit/regression tests. Concurrency-sensitive components must pass `go test -race`.
+
+---
+
+## 2. Platform & Toolchain Support Matrix
+
+- **Go Version:** Go 1.26.6 or higher.
+- **Operating Systems:** Linux (amd64, arm64), macOS (Apple Silicon, Intel), Windows (amd64).
+- **Client Browsers:** Modern browsers supporting WebAssembly (Chrome 85+, Firefox 78+, Safari 14+, Edge 85+).
+
+---
+
+## 3. Development Workflow & Quality Gate
+
+Every change must pass the repository Quality Gate before merging:
 
 ```bash
-git clone https://github.com/misbakhul29/goks.git
-cd goks
-go mod tidy
-go build ./...
-go test ./...
-```
+# 1. Format code
+gofmt -l .
 
-## Branching & Commits
-
-- One branch per feature/fix: `feat/...`, `fix/...`, `refactor/...`,
-  `perf/...`, `test/...`, `docs/...`.
-- One logical change per commit. Conventional, scoped messages:
-  `feat(router): add route groups`, `fix(action): prevent CSRF bypass`, etc.
-
-## Quality Gate (required before requesting review)
-
-```
-go fmt ./...
+# 2. Run static analysis
 go vet ./...
-go test ./...
-go test -race ./...
+
+# 3. Run unit tests with race detection
+go test -race -count=1 ./...
+
+# 4. Verify native build
 go build ./...
+
+# 5. Verify WebAssembly compilation
+GOOS=js GOARCH=wasm go build ./...
 ```
 
-For WASM/`.gox`-affecting changes, also verify the WASM build and check
-bundle size impact.
+---
 
-## Pull Request Checklist
+## 4. Git & Commit Guidelines
 
-- [ ] Tests added/updated
-- [ ] `go vet` and `go test -race ./...` pass
-- [ ] Public API changes documented (and an ADR added if breaking)
-- [ ] Security implications considered (see `.agents/rules/03-security.md`)
-- [ ] Docs (`README.md` / `ARCHITECTURE.md` / relevant guide) updated if
-      behavior changed
+We adhere to **Conventional Commits**:
+- `feat(scope): ...` — New features.
+- `fix(scope): ...` — Bug fixes.
+- `refactor(scope): ...` — Code refactoring without behavioral changes.
+- `perf(scope): ...` — Performance optimizations.
+- `test(scope): ...` — Test additions or improvements.
+- `docs(scope): ...` — Documentation updates.
 
-## Code Style
+---
 
-- Idiomatic Go, `gofmt`-clean.
-- Prefer explicit code over generics/reflection/interfaces unless justified
-  by a concrete current use case (see the anti-over-engineering checklist in
-  `AGENTS.md`).
-- No Node.js/npm dependency may be introduced.
+## 5. Security & Vulnerability Reporting
+
+Please do not report security vulnerabilities via public GitHub issues. Follow the coordinated disclosure guidelines defined in [SECURITY.md](SECURITY.md).

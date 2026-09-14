@@ -321,3 +321,124 @@ func TestRouter_PanicRecoveryInHandler(t *testing.T) {
 		t.Fatalf("expected 500 Internal Server Error on panic, got %d", w.Code)
 	}
 }
+
+func TestRouter_Precedence(t *testing.T) {
+	r := router.New()
+
+	// Register in reverse order of precedence: wildcard first, dynamic second, static third
+	r.GET("/posts/*all", func(ctx *router.Context) error {
+		return ctx.Text("wildcard:" + ctx.Param("all"))
+	})
+	r.GET("/posts/:id", func(ctx *router.Context) error {
+		return ctx.Text("dynamic:" + ctx.Param("id"))
+	})
+	r.GET("/posts/featured", func(ctx *router.Context) error {
+		return ctx.Text("static:featured")
+	})
+
+	// 1. Static must win over dynamic and wildcard
+	req1 := httptest.NewRequest("GET", "/posts/featured", nil)
+	rec1 := httptest.NewRecorder()
+	r.ServeHTTP(rec1, req1)
+	if rec1.Body.String() != "static:featured" {
+		t.Fatalf("expected static match, got %q", rec1.Body.String())
+	}
+
+	// 2. Dynamic must win over wildcard for single segment
+	req2 := httptest.NewRequest("GET", "/posts/123", nil)
+	rec2 := httptest.NewRecorder()
+	r.ServeHTTP(rec2, req2)
+	if rec2.Body.String() != "dynamic:123" {
+		t.Fatalf("expected dynamic match, got %q", rec2.Body.String())
+	}
+
+	// 3. Multi-segment falls through to wildcard
+	req3 := httptest.NewRequest("GET", "/posts/123/comments", nil)
+	rec3 := httptest.NewRecorder()
+	r.ServeHTTP(rec3, req3)
+	if rec3.Body.String() != "wildcard:123/comments" {
+		t.Fatalf("expected wildcard match, got %q", rec3.Body.String())
+	}
+}
+
+func TestRouter_ParamUnescaping(t *testing.T) {
+	r := router.New()
+	r.GET("/profile/:name", func(ctx *router.Context) error {
+		return ctx.Text(ctx.Param("name"))
+	})
+
+	req := httptest.NewRequest("GET", "/profile/Jane%20Doe", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Body.String() != "Jane Doe" {
+		t.Fatalf("expected unescaped param 'Jane Doe', got %q", rec.Body.String())
+	}
+}
+
+func TestRouter_MethodNotAllowed(t *testing.T) {
+	r := router.New()
+	r.POST("/submit", func(ctx *router.Context) error {
+		return ctx.Text("submitted")
+	})
+
+	// GET to a POST-only route
+	req := httptest.NewRequest("GET", "/submit", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405 Method Not Allowed, got %d", rec.Code)
+	}
+	if rec.Header().Get("Allow") != "POST" {
+		t.Fatalf("expected Allow: POST header, got %q", rec.Header().Get("Allow"))
+	}
+}
+
+func TestRouter_DuplicateRouteReplacement(t *testing.T) {
+	r := router.New()
+	r.GET("/dup", func(ctx *router.Context) error {
+		return ctx.Text("v1")
+	})
+	r.GET("/dup", func(ctx *router.Context) error {
+		return ctx.Text("v2")
+	})
+
+	if len(r.Routes()) != 1 {
+		t.Fatalf("expected duplicate route to update existing entry, got count %d", len(r.Routes()))
+	}
+
+	req := httptest.NewRequest("GET", "/dup", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Body.String() != "v2" {
+		t.Fatalf("expected updated handler response 'v2', got %q", rec.Body.String())
+	}
+}
+
+func TestRouter_ContextErrorMethod(t *testing.T) {
+	r := router.New()
+	r.Use(router.RequestID())
+	r.GET("/api/item", func(ctx *router.Context) error {
+		return ctx.Error(http.StatusNotFound, "Item not found")
+	})
+
+	req := httptest.NewRequest("GET", "/api/item", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", rec.Code)
+	}
+	var errResp router.ErrorResponse
+	if err := json.NewDecoder(rec.Body).Decode(&errResp); err != nil {
+		t.Fatalf("failed to decode JSON error: %v", err)
+	}
+	if errResp.Error.Code != 404 || errResp.Error.Message != "Item not found" {
+		t.Fatalf("unexpected error payload: %+v", errResp)
+	}
+	if errResp.Error.RequestID == "" {
+		t.Fatal("expected request_id in error payload")
+	}
+}

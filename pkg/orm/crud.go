@@ -69,6 +69,14 @@ func Create[T any](db *Database, m *T) error {
 	}
 
 	table := tableNameOf(m)
+	if !isValidSQLIdentifier(table) {
+		return fmt.Errorf("goks/orm: invalid table identifier: %s", table)
+	}
+	for _, col := range cols {
+		if !isValidSQLIdentifier(col) {
+			return fmt.Errorf("goks/orm: invalid column identifier: %s", col)
+		}
+	}
 	var id uint
 
 	if db.dialect != nil && db.dialect.SupportsReturning() {
@@ -292,4 +300,59 @@ func camelToSnake(s string) string {
 		result.WriteRune(r | 32) // toLower
 	}
 	return result.String()
+}
+
+// Restore un-deletes a soft-deleted model by clearing deleted_at.
+func Restore[T any](db *Database, m *T) error {
+	if db == nil {
+		db = DB
+	}
+	rv := reflect.ValueOf(m).Elem()
+
+	var id uint
+	modelField := rv.FieldByName("Model")
+	if modelField.IsValid() {
+		idVal := modelField.FieldByName("ID")
+		if idVal.IsValid() {
+			id = uint(idVal.Uint())
+		}
+		deletedAt := modelField.FieldByName("DeletedAt")
+		if deletedAt.IsValid() && deletedAt.CanSet() {
+			deletedAt.Set(reflect.Zero(deletedAt.Type()))
+		}
+	}
+
+	if id == 0 {
+		return fmt.Errorf("goks/orm: Restore: model has no ID")
+	}
+
+	table := tableNameOf(m)
+	if !isValidSQLIdentifier(table) {
+		return fmt.Errorf("goks/orm: invalid table identifier: %s", table)
+	}
+
+	query := fmt.Sprintf("UPDATE %s SET deleted_at = NULL WHERE id = %s", table, db.dialect.Placeholder(1))
+	_, err := db.db.Exec(query, id)
+	if err != nil {
+		return fmt.Errorf("goks/orm: Restore: %w", err)
+	}
+	return nil
+}
+
+func isValidSQLIdentifier(ident string) bool {
+	if ident == "" || len(ident) > 64 {
+		return false
+	}
+	for i, r := range ident {
+		if i == 0 {
+			if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r == '_') {
+				return false
+			}
+		} else {
+			if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_') {
+				return false
+			}
+		}
+	}
+	return true
 }

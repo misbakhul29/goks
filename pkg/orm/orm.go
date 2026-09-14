@@ -3,6 +3,7 @@
 package orm
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"reflect"
@@ -45,7 +46,7 @@ type Database struct {
 }
 
 // Connect opens a database connection.
-// driver: "postgres", "mysql", "sqlite3"
+// driver: "postgres", "mysql", "sqlite"
 func Connect(driver, dsn string) (*Database, error) {
 	db, err := sql.Open(driver, dsn)
 	if err != nil {
@@ -66,6 +67,35 @@ func (d *Database) Raw() *sql.DB { return d.db }
 // Close closes the database connection.
 func (d *Database) Close() error { return d.db.Close() }
 
+// Transaction executes fn inside an atomic ACID database transaction.
+// If fn returns an error or panics, the transaction is rolled back.
+func (d *Database) Transaction(ctx context.Context, fn func(tx *sql.Tx) error) (err error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	tx, err := d.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("goks/orm: begin transaction: %w", err)
+	}
+
+	defer func() {
+		if p := recover(); p != nil {
+			_ = tx.Rollback()
+			panic(p)
+		} else if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	if err = fn(tx); err != nil {
+		return err
+	}
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("goks/orm: commit transaction: %w", err)
+	}
+	return nil
+}
+
 // -----------------------------------------------------------------------
 // Query builder
 // -----------------------------------------------------------------------
@@ -83,13 +113,20 @@ func Query[T any](db ...*Database) *Builder[T] {
 
 // Builder is a fluent query builder for a specific model type.
 type Builder[T any] struct {
-	db         *Database
-	table      string
-	conditions []string
-	args       []any
-	orderBy    string
-	limitVal   int
-	offsetVal  int
+	db             *Database
+	table          string
+	conditions     []string
+	args           []any
+	orderBy        string
+	limitVal       int
+	offsetVal      int
+	includeDeleted bool
+}
+
+// WithTrashed includes soft-deleted rows in the query.
+func (b *Builder[T]) WithTrashed() *Builder[T] {
+	b.includeDeleted = true
+	return b
 }
 
 // Where adds a WHERE condition. Conditions are ANDed together.
@@ -159,8 +196,11 @@ func (b *Builder[T]) Count() (int64, error) {
 // buildSelect constructs the SELECT SQL string.
 func (b *Builder[T]) buildSelect(cols string) string {
 	q := fmt.Sprintf("SELECT %s FROM %s", cols, b.table)
-	// Filter soft-deleted rows by default
-	conditions := append([]string{"deleted_at IS NULL"}, b.conditions...)
+	var conditions []string
+	if !b.includeDeleted {
+		conditions = append(conditions, "deleted_at IS NULL")
+	}
+	conditions = append(conditions, b.conditions...)
 	if len(conditions) > 0 {
 		q += " WHERE " + strings.Join(conditions, " AND ")
 	}

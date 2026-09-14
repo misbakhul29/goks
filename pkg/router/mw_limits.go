@@ -58,8 +58,8 @@ func Timeout(d time.Duration) MiddlewareFunc {
 			select {
 			case <-reqCtx.Done():
 				tw.markTimeout()
-				ctx.w = origW
-				ctx.Status(http.StatusGatewayTimeout).Text("Gateway Timeout")
+				origW.WriteHeader(http.StatusGatewayTimeout)
+				_, _ = origW.Write([]byte("Gateway Timeout"))
 				return nil
 			case res := <-done:
 				if res.panic != nil {

@@ -6,6 +6,7 @@ package ws
 import (
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 
@@ -25,26 +26,97 @@ var upgrader = websocket.Upgrader{
 		if origin == "" {
 			return true
 		}
-		host := r.Host
-		// Allow if origin contains the host (handles http:// and https://)
-		return strings.Contains(origin, host)
+
+		originURL, err := url.Parse(origin)
+		if err != nil || originURL.Scheme == "" || originURL.Host == "" ||
+			originURL.User != nil || originURL.Path != "" ||
+			originURL.RawQuery != "" || originURL.Fragment != "" {
+			return false
+		}
+
+		scheme := "http"
+		if r.TLS != nil {
+			scheme = "https"
+		} else if r.URL != nil && r.URL.Scheme != "" {
+			scheme = strings.ToLower(r.URL.Scheme)
+		}
+		if !strings.EqualFold(originURL.Scheme, scheme) {
+			return false
+		}
+
+		requestURL, err := url.Parse(scheme + "://" + r.Host)
+		if err != nil || requestURL.Host == "" {
+			return false
+		}
+		return sameHost(originURL, requestURL, scheme)
 	},
+}
+
+func sameHost(a, b *url.URL, scheme string) bool {
+	aHost := strings.ToLower(strings.TrimSuffix(a.Hostname(), "."))
+	bHost := strings.ToLower(strings.TrimSuffix(b.Hostname(), "."))
+	if aHost == "" || aHost != bHost {
+		return false
+	}
+
+	aPort := a.Port()
+	bPort := b.Port()
+	if aPort == "" {
+		aPort = defaultPort(scheme)
+	}
+	if bPort == "" {
+		bPort = defaultPort(scheme)
+	}
+	return aPort == bPort
+}
+
+func defaultPort(scheme string) string {
+	if strings.EqualFold(scheme, "https") {
+		return "443"
+	}
+	return "80"
 }
 
 // Client represents a connected WebSocket client.
 type Client struct {
-	conn      *websocket.Conn
-	send      chan []byte
-	hub       *Hub
-	ID        string
-	closeOnce sync.Once // ensures send channel is closed exactly once
+	conn   *websocket.Conn
+	send   chan []byte
+	hub    *Hub
+	ID     string
+	sendMu sync.RWMutex
+	closed bool
+}
+
+func (c *Client) enqueue(msg []byte) bool {
+	c.sendMu.RLock()
+	defer c.sendMu.RUnlock()
+	if c.closed {
+		return false
+	}
+	select {
+	case c.send <- msg:
+		return true
+	default:
+		return false
+	}
+}
+
+func (c *Client) closeSend() {
+	c.sendMu.Lock()
+	defer c.sendMu.Unlock()
+	if c.closed {
+		return
+	}
+	c.closed = true
+	close(c.send)
 }
 
 // Hub manages connected WebSocket clients and message broadcasting.
 type Hub struct {
-	mu      sync.RWMutex
-	clients map[*Client]bool
-	onMsg   func(client *Client, msg []byte)
+	mu           sync.RWMutex
+	clients      map[*Client]bool
+	onMsg        func(client *Client, msg []byte)
+	onDisconnect func(client *Client)
 }
 
 // NewHub creates a new WebSocket hub.
@@ -66,19 +138,27 @@ func (h *Hub) Broadcast(msg []byte) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for client := range h.clients {
-		select {
-		case client.send <- msg:
-		default:
+		if !client.enqueue(msg) {
 			// Buffer full — disconnect this client.
-			client.closeOnce.Do(func() { close(client.send) })
 			delete(h.clients, client)
+			client.closeSend()
 		}
+	}
+}
+
+func (h *Hub) remove(client *Client) {
+	h.mu.Lock()
+	delete(h.clients, client)
+	h.mu.Unlock()
+	client.closeSend()
+	if h.onDisconnect != nil {
+		h.onDisconnect(client)
 	}
 }
 
 // Send sends a message to a specific client.
 func (c *Client) Send(msg []byte) {
-	c.send <- msg
+	_ = c.enqueue(msg)
 }
 
 // Handler returns an http.HandlerFunc that upgrades connections and registers them with the hub.
@@ -112,10 +192,7 @@ func (h *Hub) Handler() http.HandlerFunc {
 
 		// Reader goroutine (blocking)
 		defer func() {
-			h.mu.Lock()
-			delete(h.clients, client)
-			h.mu.Unlock()
-			close(client.send)
+			h.remove(client)
 			conn.Close()
 		}()
 

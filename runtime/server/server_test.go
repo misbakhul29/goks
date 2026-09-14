@@ -1,11 +1,15 @@
 package server
 
 import (
+	"context"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/misbakhul29/goks/pkg/component"
 	"github.com/misbakhul29/goks/pkg/html"
@@ -221,4 +225,97 @@ func TestStaticFileServing_PublicRoot(t *testing.T) {
 	if wDir.Code != 404 {
 		t.Fatalf("expected 404 for directory listing on /public/, got %d", wDir.Code)
 	}
+}
+
+func TestServer_HealthAndReady(t *testing.T) {
+	srv := New(Config{AppDir: t.TempDir()})
+	srv.setupRoutes()
+
+	// 1. Healthz probe
+	reqHealth := httptest.NewRequest("GET", "/_goks/healthz", nil)
+	recHealth := httptest.NewRecorder()
+	srv.Router().ServeHTTP(recHealth, reqHealth)
+
+	if recHealth.Code != 200 {
+		t.Fatalf("expected 200 OK for healthz, got %d", recHealth.Code)
+	}
+	if !strings.Contains(recHealth.Body.String(), `"status":"ok"`) {
+		t.Fatalf("expected ok status in healthz, got %s", recHealth.Body.String())
+	}
+
+	// 2. Ready probe
+	reqReady := httptest.NewRequest("GET", "/_goks/ready", nil)
+	recReady := httptest.NewRecorder()
+	srv.Router().ServeHTTP(recReady, reqReady)
+
+	if recReady.Code != 200 {
+		t.Fatalf("expected 200 OK for ready probe, got %d", recReady.Code)
+	}
+	if !strings.Contains(recReady.Body.String(), `"status":"ready"`) {
+		t.Fatalf("expected ready status in ready probe, got %s", recReady.Body.String())
+	}
+}
+
+func TestServer_GracefulShutdown(t *testing.T) {
+	srv := New(Config{
+		Host:   "127.0.0.1",
+		Port:   39482,
+		AppDir: t.TempDir(),
+	})
+
+	errChan := make(chan error, 1)
+	go func() {
+		errChan <- srv.Start()
+	}()
+
+	// Wait briefly for server to bind and start listening
+	var resp *http.Response
+	var err error
+	for i := 0; i < 20; i++ {
+		time.Sleep(25 * time.Millisecond)
+		resp, err = http.Get("http://127.0.0.1:39482/_goks/healthz")
+		if err == nil && resp.StatusCode == 200 {
+			_ = resp.Body.Close()
+			break
+		}
+	}
+	if err != nil {
+		t.Fatalf("failed to reach server during startup: %v", err)
+	}
+
+	// Trigger graceful shutdown
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		t.Fatalf("unexpected shutdown error: %v", err)
+	}
+
+	// Ensure Start() returned cleanly without ErrServerClosed
+	startErr := <-errChan
+	if startErr != nil {
+		t.Fatalf("expected clean exit from Start(), got %v", startErr)
+	}
+}
+
+func TestServer_ConcurrentRequests(t *testing.T) {
+	srv := New(Config{AppDir: t.TempDir()})
+	srv.setupRoutes()
+
+	const concurrency = 50
+	var wg sync.WaitGroup
+	wg.Add(concurrency)
+
+	for i := 0; i < concurrency; i++ {
+		go func(id int) {
+			defer wg.Done()
+			req := httptest.NewRequest("GET", "/_goks/healthz", nil)
+			rec := httptest.NewRecorder()
+			srv.Router().ServeHTTP(rec, req)
+
+			if rec.Code != 200 {
+				t.Errorf("request %d failed with status %d", id, rec.Code)
+			}
+		}(i)
+	}
+	wg.Wait()
 }

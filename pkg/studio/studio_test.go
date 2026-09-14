@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/misbakhul29/goks/internal/version"
 	"github.com/misbakhul29/goks/pkg/action"
 	"github.com/misbakhul29/goks/pkg/router"
 	"github.com/misbakhul29/goks/pkg/rpc"
@@ -76,8 +77,8 @@ func TestStudio_OverviewAndRoutes(t *testing.T) {
 	if overview["framework"] != "GoKS" {
 		t.Errorf("Expected framework GoKS, got %v", overview["framework"])
 	}
-	if overview["version"] != "v0.15.1" {
-		t.Errorf("Expected version v0.15.1, got %v", overview["version"])
+	if overview["version"] != version.Current() {
+		t.Errorf("Expected version %s, got %v", version.Current(), overview["version"])
 	}
 
 	// 3. Test Routes API

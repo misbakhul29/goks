@@ -31,6 +31,9 @@ func NeedsHydration(node *Node) bool {
 		if c, ok := node.Component.(ClientComponent); ok && c.ClientHydrated() {
 			return true
 		}
+		if NeedsHydration(node.Component.Render()) {
+			return true
+		}
 	}
 
 	if node.Props != nil {

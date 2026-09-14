@@ -1,6 +1,7 @@
 package router
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 )
@@ -10,6 +11,21 @@ func generateID() string {
 	b := make([]byte, 16)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+const requestIDKey contextKey = "goks_request_id"
+
+// ContextWithRequestID injects a request ID into a context.Context.
+func ContextWithRequestID(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, requestIDKey, id)
+}
+
+// RequestIDFromContext retrieves the request ID from a context.Context if present.
+func RequestIDFromContext(ctx context.Context) string {
+	if v, ok := ctx.Value(requestIDKey).(string); ok {
+		return v
+	}
+	return ""
 }
 
 // RequestID is a middleware that injects a unique X-Request-Id header to each request
@@ -23,6 +39,9 @@ func RequestID() MiddlewareFunc {
 				ctx.Request().Header.Set("X-Request-Id", reqID)
 			}
 			ctx.SetHeader("X-Request-Id", reqID)
+
+			req := ctx.Request().WithContext(ContextWithRequestID(ctx.Request().Context(), reqID))
+			ctx.SetRequest(req)
 
 			return next(ctx)
 		}

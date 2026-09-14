@@ -1,7 +1,9 @@
 package component_test
 
 import (
+	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/misbakhul29/goks/pkg/component"
@@ -203,4 +205,85 @@ func TestNeedsHydration(t *testing.T) {
 	if !component.NeedsHydration(parent) {
 		t.Errorf("expected parent with interactive child to need hydration")
 	}
+}
+
+type StatefulComponent struct {
+	Initial int
+}
+
+func (s *StatefulComponent) Render() *component.Node {
+	val, _ := component.UseState(s.Initial)
+	return component.H("div", nil, component.Text(fmt.Sprintf("Val: %d", val)))
+}
+
+func TestUseState_SSRFallback(t *testing.T) {
+	// Rendering a stateful component during SSR should safely render initial value without panicking
+	comp := &StatefulComponent{Initial: 42}
+	out := component.RenderToString(component.C(comp))
+	if !strings.Contains(out, "Val: 42") {
+		t.Fatalf("expected SSR to render initial value 42, got: %s", out)
+	}
+}
+
+func TestUseState_HookInvariantViolation(t *testing.T) {
+	// Simulate a parent fiber whose child 0 already has an int hook at slot 0
+	fiber := &component.FiberNode{
+		Children: []*component.FiberNode{
+			{Hooks: []any{100}}, // slot 0 was initialized as int
+		},
+	}
+
+	// We temporarily set activeFiber and try to call UseState[string] at slot 0
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic on hook invariant violation")
+		}
+		errMsg := fmt.Sprintf("%v", r)
+		if !strings.Contains(errMsg, "GoKS Hook Invariant Violation") {
+			t.Fatalf("unexpected panic message: %s", errMsg)
+		}
+	}()
+
+	// Simulate component execution
+	component.Expand(component.FC(func() *component.Node {
+		// Wrong type at slot 0
+		component.UseState("mismatched type")
+		return nil
+	}), func() {}, fiber)
+}
+
+func TestRenderToString_DeterministicAttributes(t *testing.T) {
+	node := component.H("div", component.Props{
+		"z-index": "10",
+		"class":   "box",
+		"id":      "main",
+		"alpha":   "first",
+	}, component.Text("hello"))
+
+	first := component.RenderToString(node)
+	for i := 0; i < 20; i++ {
+		repeat := component.RenderToString(node)
+		if repeat != first {
+			t.Fatalf("SSR attribute order changed between runs:\nFirst:  %s\nRepeat: %s", first, repeat)
+		}
+	}
+}
+
+func TestRenderToString_ConcurrentIsolation(t *testing.T) {
+	var wg sync.WaitGroup
+	for i := 0; i < 50; i++ {
+		wg.Add(1)
+		id := i
+		go func() {
+			defer wg.Done()
+			comp := &StatefulComponent{Initial: id}
+			out := component.RenderToString(component.C(comp))
+			expected := fmt.Sprintf("Val: %d", id)
+			if !strings.Contains(out, expected) {
+				t.Errorf("concurrent SSR leaked state or rendered wrong value. Expected %s, got %s", expected, out)
+			}
+		}()
+	}
+	wg.Wait()
 }

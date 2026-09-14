@@ -3,6 +3,7 @@ package component
 import (
 	"fmt"
 	"html"
+	"sort"
 	"strings"
 )
 
@@ -33,16 +34,25 @@ func RenderToString(node *Node) string {
 		sb.WriteString("<")
 		sb.WriteString(node.Tag)
 
-		for k, v := range node.Props {
+		// Sort attribute keys for deterministic SSR output across all platforms
+		keys := make([]string, 0, len(node.Props))
+		for k := range node.Props {
 			if strings.HasPrefix(k, "on") || k == "innerHTML" {
 				continue // Skip event listeners and innerHTML on element tag
 			}
-			if k == "className" {
-				k = "class"
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+
+		for _, k := range keys {
+			v := node.Props[k]
+			attrName := k
+			if attrName == "className" {
+				attrName = "class"
 			}
 			// Escape attribute values to prevent XSS injection.
 			escapedVal := html.EscapeString(fmt.Sprintf("%v", v))
-			sb.WriteString(fmt.Sprintf(" %s=\"%s\"", k, escapedVal))
+			sb.WriteString(fmt.Sprintf(" %s=\"%s\"", attrName, escapedVal))
 		}
 		sb.WriteString(">")
 

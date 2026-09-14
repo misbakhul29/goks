@@ -37,12 +37,35 @@ review before merge:
 
 ## Reporting a Vulnerability
 
-Do not open a public issue for a suspected vulnerability. Instead, contact
+Do not open a public issue for a suspected vulnerability. Instead, submit a
+private vulnerability report through GitHub Security Advisories or contact
 the maintainer privately (see repository owner contact on GitHub) with:
 
 - A description of the issue and affected package/version.
 - Steps to reproduce or a minimal proof of concept.
 - Any suggested fix, if known.
+
+### Disclosure Process & Timeline
+
+1. **Acknowledgment**: Within 48 hours of report receipt, the maintainers will
+   acknowledge receipt and begin triage.
+2. **Triage & Reproduction**: The vulnerability is evaluated, assigned a
+   severity level (CVSS v3/v4), and reproduced with a regression test.
+3. **Remediation**: A private fix and regression test are developed on an isolated
+   security branch.
+4. **Advisory Release**: A GitHub Security Advisory is drafted with affected
+   versions, patched versions, severity rating, and workaround steps.
+5. **Patch Release**: A patched SemVer release is published simultaneously with
+   the public security advisory.
+
+## Security Advisory Format
+
+When releasing a patch for a verified vulnerability, the advisory must include:
+- Summary of the vulnerability and attack vector
+- Affected packages and version ranges
+- Patched versions
+- Workaround (if applicable)
+- Credits to the reporter (unless requested anonymous)
 
 ## Non-Negotiable
 

@@ -5,7 +5,7 @@ package cli
 
 var tmplGoMod = `module {{.Module}}
 
-go 1.22
+go 1.26.6
 
 require github.com/misbakhul29/goks {{.Version}}
 `

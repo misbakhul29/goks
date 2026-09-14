@@ -13,22 +13,37 @@ import (
 	"github.com/misbakhul29/goks/internal/version"
 )
 
+var moduleFlag string
+
 // NewCmd returns the `goks new` subcommand.
 func NewCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "new <app-name>",
 		Short: "Create a new GoKS application",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return scaffoldApp(args[0])
+			return scaffoldApp(args[0], moduleFlag)
 		},
 	}
+	cmd.Flags().StringVarP(&moduleFlag, "module", "m", "", "Go module path for the new application")
+	return cmd
 }
 
-func scaffoldApp(name string) error {
-	slug := strings.ToLower(strings.ReplaceAll(name, " ", "-"))
-	appDir := filepath.Join(".", slug)
+func scaffoldApp(name string, modPath string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return fmt.Errorf("app name cannot be empty")
+	}
+	if strings.Contains(name, "..") || strings.ContainsAny(name, `/\:*?"<>|`) {
+		return fmt.Errorf("invalid app name '%s': must not contain path separators or traversal characters", name)
+	}
 
+	slug := strings.ToLower(strings.ReplaceAll(name, " ", "-"))
+	if slug == "" || slug == "." {
+		return fmt.Errorf("invalid app name '%s'", name)
+	}
+
+	appDir := filepath.Join(".", slug)
 	if _, err := os.Stat(appDir); err == nil {
 		return fmt.Errorf("directory '%s' already exists", slug)
 	}
@@ -48,9 +63,13 @@ func scaffoldApp(name string) error {
 		color.HiBlack("  create  %s/", filepath.Join(slug, d))
 	}
 
+	if modPath == "" {
+		modPath = "github.com/user/" + slug
+	}
+
 	data := map[string]string{
 		"AppName": name,
-		"Module":  "github.com/user/" + slug,
+		"Module":  modPath,
 		"Version": getGoKSVersion(),
 	}
 
