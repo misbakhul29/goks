@@ -12,7 +12,6 @@ import (
 	"github.com/misbakhul29/goks/pkg/metadata"
 )
 
-
 type testLayout struct {
 	component.ComponentBase
 	Children component.Renderable
@@ -223,4 +222,3 @@ func TestStaticFileServing_PublicRoot(t *testing.T) {
 		t.Fatalf("expected 404 for directory listing on /public/, got %d", wDir.Code)
 	}
 }
-

@@ -76,8 +76,8 @@ func TestStudio_OverviewAndRoutes(t *testing.T) {
 	if overview["framework"] != "GoKS" {
 		t.Errorf("Expected framework GoKS, got %v", overview["framework"])
 	}
-	if overview["version"] != "v0.13.0" {
-		t.Errorf("Expected version v0.13.0, got %v", overview["version"])
+	if overview["version"] != "v0.15.1" {
+		t.Errorf("Expected version v0.15.1, got %v", overview["version"])
 	}
 
 	// 3. Test Routes API

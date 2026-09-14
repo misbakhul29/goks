@@ -12,8 +12,8 @@ experience while staying 100% Go underneath.
 
 Introduce `.gox` files with a declarative, JSX-like syntax
 (`<div><h1>{title}</h1></div>`, `<ui.Button />`) that compiles directly into
-plain Go code (`internal/compiler`, `pkg/compiler`) in an isolated build
-workspace, rather than being interpreted at runtime.
+plain Go code (`internal/compiler`) in an isolated build workspace, rather
+than being interpreted at runtime.
 
 ## Consequences
 

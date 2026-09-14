@@ -53,10 +53,10 @@ func generatePage(route string) error {
 
 	// Clean the route and build the target directory inside app/
 	route = strings.TrimPrefix(filepath.ToSlash(filepath.Clean(route)), "/")
-	
+
 	appDir := "app"
 	targetDir := filepath.Join(appDir, route)
-	
+
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
@@ -70,7 +70,7 @@ func generatePage(route string) error {
 	packageName := filepath.Base(targetDir)
 	packageName = strings.ReplaceAll(packageName, "-", "")
 	packageName = strings.ReplaceAll(packageName, " ", "")
-	
+
 	// Create a readable title for the component
 	pageTitle := filepath.Base(route)
 	pageTitle = strings.Title(strings.ReplaceAll(pageTitle, "-", " "))

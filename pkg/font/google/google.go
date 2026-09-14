@@ -47,7 +47,6 @@ func Classes(parts ...any) string {
 	return strings.Join(classes, " ")
 }
 
-
 // Options configures how a Google Font is loaded.
 type Options struct {
 	// Variable is the CSS custom property name that will hold the font-family value.

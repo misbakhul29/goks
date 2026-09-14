@@ -129,7 +129,6 @@ func validateJSXContent(jsx string, baseOffset int, fullContent string) []Diagno
 	d.Strict = true
 	d.Entity = xml.HTMLEntity
 
-
 	var tagStack []tagInfo
 	hasParseError := false
 

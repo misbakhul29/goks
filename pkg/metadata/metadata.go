@@ -28,8 +28,8 @@ type Metadata struct {
 	ThemeColor    string
 	Canonical     string
 	Manifest      string
-	Charset       string            // defaults to "UTF-8"
-	Viewport      string            // defaults to "width=device-width, initial-scale=1.0"
+	Charset       string // defaults to "UTF-8"
+	Viewport      string // defaults to "width=device-width, initial-scale=1.0"
 	Icons         *Icons
 	OpenGraph     *OpenGraph
 	Twitter       *Twitter

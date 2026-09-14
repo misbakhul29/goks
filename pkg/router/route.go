@@ -7,7 +7,6 @@ import (
 	"github.com/misbakhul29/goks/pkg/component"
 )
 
-
 // CurrentPath is a global store holding the current URL path.
 var CurrentPath = component.NewStore("/")
 
@@ -69,7 +68,6 @@ func (r *ClientRouter) Forward() {
 func (r *ClientRouter) Path() string {
 	return CurrentPath.Get()
 }
-
 
 // PageRoute is a UI component that renders its child only if the current path matches.
 // Works for both SSR (backend) and SPA (WASM client).
@@ -178,4 +176,3 @@ func (n *DefaultNotFound) Render() *component.Node {
 		}, component.Text("Return Home")),
 	)
 }
-

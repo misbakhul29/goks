@@ -204,4 +204,3 @@ func TestNeedsHydration(t *testing.T) {
 		t.Errorf("expected parent with interactive child to need hydration")
 	}
 }
-

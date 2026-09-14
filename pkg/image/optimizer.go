@@ -29,13 +29,13 @@ var DefaultAllowedWidths = []int{
 
 // Config configures the image optimization service.
 type Config struct {
-	AppDir         string        // Root directory of the GoKS app
-	CacheDir       string        // Directory to store optimized images (default: .goks/cache/images)
-	MaxSourceBytes int64         // Maximum allowed size of source image in bytes (default: 20MB)
-	MaxWidth       int           // Maximum allowable width in pixels (default: 4096)
-	MaxHeight      int           // Maximum allowable height in pixels (default: 4096)
-	AllowedDomains []string      // Whitelisted remote domains (empty = remote images disabled)
-	AllowedWidths  []int         // Allowed target widths (default: DefaultAllowedWidths)
+	AppDir         string          // Root directory of the GoKS app
+	CacheDir       string          // Directory to store optimized images (default: .goks/cache/images)
+	MaxSourceBytes int64           // Maximum allowed size of source image in bytes (default: 20MB)
+	MaxWidth       int             // Maximum allowable width in pixels (default: 4096)
+	MaxHeight      int             // Maximum allowable height in pixels (default: 4096)
+	AllowedDomains []string        // Whitelisted remote domains (empty = remote images disabled)
+	AllowedWidths  []int           // Allowed target widths (default: DefaultAllowedWidths)
 	EmbeddedPublic http.FileSystem // Optional embedded filesystem for standalone mode
 }
 

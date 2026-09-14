@@ -14,8 +14,8 @@ import (
 
 // Server implements a JSON-RPC 2.0 Language Server for GOX files.
 type Server struct {
-	mu        sync.RWMutex
-	docs      map[string]string // URI -> file content
+	mu         sync.RWMutex
+	docs       map[string]string // URI -> file content
 	isShutdown bool
 }
 

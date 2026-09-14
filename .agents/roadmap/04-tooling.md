@@ -10,7 +10,7 @@ fast, reliable, and pleasant.
 - Confirm the in-browser compile-error overlay covers GOX compile errors,
   Go build errors, and Tailwind errors distinctly.
 - `internal/lsp` coverage check against current GOX syntax (keep in sync
-  with `pkg/compiler`/`internal/compiler`).
+  with `internal/compiler`).
 - `goks ui add` component coverage and consistency with Tailwind v4.
 
 ## Acceptance Criteria

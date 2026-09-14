@@ -46,21 +46,24 @@ one platform, not to keep bolting on more surface area.
 ## Repository Map (current, keep updated)
 
 - `main.go` — CLI entrypoint (`goks` binary).
-- `internal/cli/` — CLI commands (`new`, `dev`, `build`, `ui`, `generate`, `page`, ...).
+- `internal/cli/` — CLI commands (`new`, `dev`, `build`, `start`, `ui`, `generate`, `page`, `db`, `studio`, `export`, `lsp`, ...).
 - `internal/compiler/` — GOX → Go compilation pipeline glue.
 - `internal/generator/` — code generation helpers (scaffolding).
 - `internal/livereload/` — dev-server live reload.
 - `internal/lsp/` — language server support for `.gox`.
+- `internal/version/` — single source of the framework version for tooling and runtime diagnostics.
 - `internal/watcher/` — filesystem watcher for `goks dev`.
 - `pkg/action/` — progressive server actions (fetch + no-JS form fallback, CSRF).
 - `pkg/auth/` — JWT/session auth primitives.
+- `pkg/auth/oauth/` — OAuth2 social login providers with PKCE.
 - `pkg/cache/` — caching primitives.
-- `pkg/compiler/` — GOX/component compiler internals exposed as a package.
-- `pkg/component/` — component model, hooks (`UseState`, etc.), reconciliation.
+- `pkg/component/` — component model, hooks (`UseState`, etc.), reconciliation, SSR, islands, Suspense, and streaming.
 - `pkg/env/` — environment/config loading.
 - `pkg/font/` — font asset handling.
 - `pkg/html/` — HTML rendering helpers.
+- `pkg/image/` — image optimization and responsive image components.
 - `pkg/metadata/` — page metadata (title/SEO tags).
+- `pkg/studio/` — embedded development dashboard and runtime telemetry.
 - `pkg/orm/` — query builder, migrations, soft delete, timestamps.
 - `pkg/rbac/` — role-based access control middleware.
 - `pkg/router/` — file-system + programmatic routing.

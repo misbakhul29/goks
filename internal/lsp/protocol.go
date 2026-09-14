@@ -5,10 +5,10 @@ import "encoding/json"
 // JSON-RPC 2.0 Base Protocol
 
 type Request struct {
-	JSONRPC string          `json:"jsonrpc"`
+	JSONRPC string           `json:"jsonrpc"`
 	ID      *json.RawMessage `json:"id,omitempty"`
-	Method  string          `json:"method"`
-	Params  json.RawMessage `json:"params,omitempty"`
+	Method  string           `json:"method"`
+	Params  json.RawMessage  `json:"params,omitempty"`
 }
 
 type Response struct {
@@ -115,10 +115,10 @@ type PublishDiagnosticsParams struct {
 // Server Initialization
 
 type InitializeParams struct {
-	ProcessID *int                `json:"processId"`
-	RootURI   string              `json:"rootUri,omitempty"`
-	RootPath  string              `json:"rootPath,omitempty"`
-	Client    *ClientInfo         `json:"clientInfo,omitempty"`
+	ProcessID *int        `json:"processId"`
+	RootURI   string      `json:"rootUri,omitempty"`
+	RootPath  string      `json:"rootPath,omitempty"`
+	Client    *ClientInfo `json:"clientInfo,omitempty"`
 }
 
 type ClientInfo struct {
@@ -137,10 +137,10 @@ type ServerInfo struct {
 }
 
 type ServerCapabilities struct {
-	TextDocumentSync           int                 `json:"textDocumentSync"` // 1 = Full
-	CompletionProvider         *CompletionOptions  `json:"completionProvider,omitempty"`
-	HoverProvider              bool                `json:"hoverProvider,omitempty"`
-	DocumentFormattingProvider bool                `json:"documentFormattingProvider,omitempty"`
+	TextDocumentSync           int                `json:"textDocumentSync"` // 1 = Full
+	CompletionProvider         *CompletionOptions `json:"completionProvider,omitempty"`
+	HoverProvider              bool               `json:"hoverProvider,omitempty"`
+	DocumentFormattingProvider bool               `json:"documentFormattingProvider,omitempty"`
 }
 
 type CompletionOptions struct {
@@ -197,7 +197,6 @@ type CompletionItem struct {
 	SortText            string             `json:"sortText,omitempty"`
 	AdditionalTextEdits []TextEdit         `json:"additionalTextEdits,omitempty"`
 }
-
 
 type CompletionList struct {
 	IsIncomplete bool             `json:"isIncomplete"`

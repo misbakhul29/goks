@@ -24,7 +24,7 @@ func StartCmd() *cobra.Command {
 
 			cwd, _ := os.Getwd()
 			serverPath := filepath.Join(cwd, ".goks", "build", "server")
-			
+
 			if _, err := os.Stat(serverPath); os.IsNotExist(err) {
 				return fmt.Errorf("production build not found. Run 'goks build' first")
 			}
@@ -35,7 +35,7 @@ func StartCmd() *cobra.Command {
 			runCmd.Dir = cwd
 			runCmd.Stdout = os.Stdout
 			runCmd.Stderr = os.Stderr
-			
+
 			env := os.Environ()
 			if port != "" {
 				env = append(env, "GOKS_CHILD_PORT="+port)

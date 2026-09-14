@@ -55,7 +55,7 @@ type Config struct {
 
 	// Standalone mode: embedded filesystems (set by generated server_main.go)
 	EmbeddedAssets fs.ReadFileFS // embeds app.wasm, app.css, wasm_exec.js
-	EmbeddedPublic fs.FS        // embeds public/ directory
+	EmbeddedPublic fs.FS         // embeds public/ directory
 }
 
 // DevServer is the GoKS development server with hot reload.
@@ -430,7 +430,6 @@ func (s *DevServer) serveShell(ctx *router.Context) error {
 		// Restore path
 		router.CurrentPath.Set(originalPath)
 		ssrMutex.Unlock()
-
 
 		if renderedNode != nil && renderedNode.Tag == "html" {
 			meta := metadata.ExtractFromTree(component.C(s.cfg.Root))

@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/misbakhul29/goks/internal/version"
 	"github.com/misbakhul29/goks/pkg/action"
 	"github.com/misbakhul29/goks/pkg/router"
 	"github.com/misbakhul29/goks/pkg/rpc"
@@ -100,22 +101,22 @@ func (s *Studio) handleOverview(w http.ResponseWriter, r *http.Request) {
 	tables := s.getSQLiteTables()
 
 	data := map[string]any{
-		"framework":    "GoKS",
-		"version":      "v0.13.0",
-		"go_version":   runtime.Version(),
-		"os":           runtime.GOOS,
-		"arch":         runtime.GOARCH,
-		"goroutines":   runtime.NumGoroutine(),
-		"alloc_bytes":  mem.Alloc,
-		"sys_bytes":    mem.Sys,
-		"gc_cycles":    mem.NumGC,
-		"uptime_sec":   int(time.Since(startTime).Seconds()),
-		"routes_count": routesCount,
+		"framework":     "GoKS",
+		"version":       version.Current(),
+		"go_version":    runtime.Version(),
+		"os":            runtime.GOOS,
+		"arch":          runtime.GOARCH,
+		"goroutines":    runtime.NumGoroutine(),
+		"alloc_bytes":   mem.Alloc,
+		"sys_bytes":     mem.Sys,
+		"gc_cycles":     mem.NumGC,
+		"uptime_sec":    int(time.Since(startTime).Seconds()),
+		"routes_count":  routesCount,
 		"actions_count": len(actions),
-		"rpc_count":    len(rpcMethods),
-		"tables_count": len(tables),
-		"dev_mode":     s.cfg.DevMode,
-		"app_dir":      s.cfg.AppDir,
+		"rpc_count":     len(rpcMethods),
+		"tables_count":  len(tables),
+		"dev_mode":      s.cfg.DevMode,
+		"app_dir":       s.cfg.AppDir,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

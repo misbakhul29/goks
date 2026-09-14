@@ -24,23 +24,23 @@ func Compress() MiddlewareFunc {
 			if !strings.Contains(ctx.Request().Header.Get("Accept-Encoding"), "gzip") {
 				return next(ctx)
 			}
-			
+
 			ctx.SetHeader("Content-Encoding", "gzip")
 			ctx.SetHeader("Vary", "Accept-Encoding")
-			
+
 			gz := gzip.NewWriter(ctx.Response())
 			defer gz.Close()
-			
+
 			// Create a wrapped ResponseWriter that writes to the gzip writer
 			gzw := gzipResponseWriter{
 				ResponseWriter: ctx.Response(),
 				Writer:         gz,
 			}
-			
+
 			// We need to inject this wrapped response writer into the context.
 			// Assuming Context has a field 'w' of type http.ResponseWriter.
 			ctx.w = gzw
-			
+
 			return next(ctx)
 		}
 	}

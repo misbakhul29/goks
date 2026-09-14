@@ -33,16 +33,19 @@ update it in the same change that restructures code.
 | --- | --- |
 | `pkg/router` | File-system routing (`app/page.gox`, `app/layout.gox`) + programmatic routes. |
 | `pkg/action` | Server actions: dual-mode (WASM `fetch()` + no-JS HTML form fallback), CSRF. |
-| `pkg/component` | Component model, hooks (`UseState`, ...), reconciliation. |
-| `pkg/compiler` / `internal/compiler` | GOX syntax -> Go code generation. |
+| `pkg/component` | Component model, hooks (`UseState`, ...), reconciliation, SSR, islands, Suspense, and streaming. |
+| `internal/compiler` | GOX syntax -> Go code generation in an isolated workspace. |
+| `internal/generator` | File-system route and entrypoint generation. |
 | `pkg/orm` | Query builder, migrations, soft delete, timestamps, SQLite support. |
-| `pkg/auth` | JWT/session-based authentication primitives. |
+| `pkg/auth`, `pkg/auth/oauth` | JWT/session authentication primitives and OAuth2 providers. |
 | `pkg/rbac` | Role-based access control middleware. |
 | `pkg/ws` | WebSocket hub, typed event routing, rooms. |
 | `pkg/store` | Reactive global state store for client WASM. |
 | `pkg/rpc` | RPC plumbing bridging server actions and the WASM client. |
-| `pkg/cache`, `pkg/env`, `pkg/font`, `pkg/html`, `pkg/metadata` | Supporting infrastructure. |
-| `internal/cli` | `goks` CLI commands: `new`, `dev`, `build`, `ui`, `generate`, `page`. |
+| `pkg/cache`, `pkg/env`, `pkg/font`, `pkg/html`, `pkg/image`, `pkg/metadata` | Supporting infrastructure. |
+| `pkg/studio` | Embedded development dashboard for routes, actions, RPC, database, migrations, and runtime telemetry. |
+| `internal/cli` | `goks` CLI commands: `new`, `dev`, `build`, `start`, `ui`, `generate`, `page`, `db`, `studio`, `export`, and `lsp`. |
+| `internal/version` | Single source of the framework version used by tooling and runtime diagnostics. |
 | `internal/watcher`, `internal/livereload` | Dev server hot reload. |
 | `internal/lsp` | Editor/LSP support for `.gox` files. |
 | `runtime/server`, `runtime/client` | Glue that wires a compiled GoKS app together on server and in the WASM client. |

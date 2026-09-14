@@ -10,9 +10,10 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime/debug"
 	"strings"
 	"text/template"
+
+	"github.com/misbakhul29/goks/internal/version"
 )
 
 type RouteNode struct {
@@ -300,12 +301,7 @@ func generateRouterInternal(appDir string, isProd bool, standalone bool) error {
 }
 
 func getGoKSVersion() string {
-	if info, ok := debug.ReadBuildInfo(); ok {
-		if info.Main.Version != "" && info.Main.Version != "(devel)" {
-			return info.Main.Version
-		}
-	}
-	return "v0.15.0"
+	return version.Current()
 }
 
 func writeEntryGoMod(entryDir, appDir, moduleName string) error {
@@ -318,7 +314,7 @@ require github.com/misbakhul29/goks %s
 
 replace %s => ../workspace
 `, moduleName, getGoKSVersion(), moduleName)
-	
+
 	// If the user's go.mod has a replace for goks, we should copy it
 	if b, err := os.ReadFile(filepath.Join(appDir, "go.mod")); err == nil {
 		lines := strings.Split(string(b), "\n")
@@ -484,7 +480,6 @@ func writeRouterFile(entryDir string, rootNode *RouteNode, moduleName string) er
 	if err := tmpl.Execute(&buf, data); err != nil {
 		return err
 	}
-
 
 	var gettersBuf strings.Builder
 	generateGetters(rootNode, &gettersBuf)

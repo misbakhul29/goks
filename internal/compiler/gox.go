@@ -203,7 +203,7 @@ func extractAttrExprs(xmlStr string) (string, map[string]string) {
 	for i < len(xmlStr) {
 		if i+1 < len(xmlStr) && xmlStr[i] == '=' && xmlStr[i+1] == '{' {
 			result.WriteByte('=') // keep the '='
-			i++                  // skip '='
+			i++                   // skip '='
 
 			// Collect balanced {…} expression (handles nesting and strings)
 			depth := 0

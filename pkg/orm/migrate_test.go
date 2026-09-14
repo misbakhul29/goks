@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	testMockDrv = &mockDriver{}
+	testMockDrv  = &mockDriver{}
 	registerOnce sync.Once
 )
 

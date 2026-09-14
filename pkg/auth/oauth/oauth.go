@@ -18,6 +18,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/misbakhul29/goks/internal/version"
 )
 
 // Endpoints contains the OAuth2 provider service URLs.
@@ -232,7 +234,7 @@ func (p *Provider) UserInfo(ctx context.Context, token *Token) (*UserInfo, error
 	req.Header.Set("Authorization", "Bearer "+token.AccessToken)
 	req.Header.Set("Accept", "application/json")
 	// GitHub recommends User-Agent
-	req.Header.Set("User-Agent", "GoKS-OAuth2/v0.15.0")
+	req.Header.Set("User-Agent", "GoKS-OAuth2/"+version.Current())
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
@@ -331,7 +333,7 @@ func (p *Provider) fetchGitHubPrimaryEmail(ctx context.Context, token string) st
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "GoKS-OAuth2/v0.15.0")
+	req.Header.Set("User-Agent", "GoKS-OAuth2/"+version.Current())
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {

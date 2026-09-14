@@ -142,7 +142,6 @@ func GetHover(content string, pos Position) *Hover {
 		return nil
 	}
 
-
 	// Inside a tag: determine if word is the tag name (right after < or </)
 	trimmedAfterOpen := strings.TrimLeft(prefix[lastOpen+1:], "/")
 	trimmedAfterOpen = strings.TrimSpace(trimmedAfterOpen)

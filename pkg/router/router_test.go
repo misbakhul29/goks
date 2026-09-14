@@ -321,4 +321,3 @@ func TestRouter_PanicRecoveryInHandler(t *testing.T) {
 		t.Fatalf("expected 500 Internal Server Error on panic, got %d", w.Code)
 	}
 }
-

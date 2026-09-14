@@ -16,10 +16,10 @@ func MaxBytes(maxSize int64) MiddlewareFunc {
 				ctx.Status(http.StatusRequestEntityTooLarge).Text("Request Entity Too Large")
 				return nil
 			}
-			
+
 			// Protect against streams without Content-Length
 			ctx.Request().Body = http.MaxBytesReader(ctx.Response(), ctx.Request().Body, maxSize)
-			
+
 			return next(ctx)
 		}
 	}
