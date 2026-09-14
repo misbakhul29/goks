@@ -70,6 +70,14 @@ func (l *Layout) Render() *component.Node {
 	}
 }
 
+func TestValidateDocument_InlineApostropheInText(t *testing.T) {
+	line := "<li><code class=\"text-cyan-300\">Email</code>: User's verified primary email.</li>"
+	diag := checkUnclosedAttributes(line, 0, line)
+	if diag != nil {
+		t.Errorf("expected nil diagnostic for text with apostrophe, got: %+v", diag)
+	}
+}
+
 func TestValidateDocument_UnclosedTag(t *testing.T) {
 	unclosedGOX := `package app
 
@@ -124,6 +132,64 @@ func (l *Layout) Render() *component.Node {
 	diags := ValidateDocument("file:///app/layout.gox", mismatchedGOX)
 	if len(diags) == 0 {
 		t.Fatalf("expected diagnostics for mismatched tag, got 0")
+	}
+}
+
+func TestValidateDocument_TextWithApostrophe(t *testing.T) {
+	gox := `package app
+
+import "github.com/misbakhul29/goks/pkg/component"
+
+type Page struct {
+	component.ComponentBase
+}
+
+func (p *Page) Render() *component.Node {
+	return (
+		<div>
+			<p>
+				Sorry, this page doesn't exist or has been relocated.
+			</p>
+		</div>
+	)
+}
+`
+	diags := ValidateDocument("file:///app/page.gox", gox)
+	if len(diags) > 0 {
+		t.Errorf("expected 0 diagnostics for text with apostrophe, got %d: %v", len(diags), diags)
+	}
+}
+
+func TestValidateDocument_UnclosedAttribute(t *testing.T) {
+	gox := `package app
+
+import "github.com/misbakhul29/goks/pkg/component"
+
+type Page struct {
+	component.ComponentBase
+}
+
+func (p *Page) Render() *component.Node {
+	return (
+		<div class="unclosed>
+			<p>Hello</p>
+		</div>
+	)
+}
+`
+	diags := ValidateDocument("file:///app/page.gox", gox)
+	if len(diags) == 0 {
+		t.Fatalf("expected diagnostics for unclosed attribute quote, got 0")
+	}
+	found := false
+	for _, d := range diags {
+		if strings.Contains(d.Message, "Unclosed string literal in tag attribute") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected diagnostic for unclosed string literal in tag attribute, got %v", diags)
 	}
 }
 

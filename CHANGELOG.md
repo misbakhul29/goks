@@ -2,6 +2,18 @@
 
 All notable changes to GoKS are documented in this file in accordance with [Keep a Changelog](https://keepachangelog.com/) and [Semantic Versioning](https://semver.org/).
 
+## [v1.1.0] - 2026-09-14
+
+### Added
+- **HTML Semantic & Media Tags**: Added `Pre`, `Code`, `Kbd`, `Blockquote`, `Details`, `Summary`, `Time`, `Picture`, `Source`, `Video`, and `Audio` helper functions in `pkg/html`.
+- **Static Export Asset Copying**: `goks export` now automatically copies bundled CSS (`app.css`), WASM binary (`app.wasm`), runtime glue (`wasm_exec.js`), and user static assets from `public/` into the export output directory.
+
+### Fixed
+- **LSP Unclosed Attribute False Positive**: Fixed `checkUnclosedAttributes` in `internal/lsp/diagnostics.go` to only evaluate string literal quotes within tag brackets (`<tag ...>`), preventing false errors on apostrophes/quotes in text nodes.
+- **Server Shell Metadata Isolation**: Fixed `meta` variable scoping in `serveShell` when rendering the root component.
+
+---
+
 ## [v1.0.0] - 2026-09-14
 
 ### Major Milestone: Production General Availability (GA)

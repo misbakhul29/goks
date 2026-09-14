@@ -337,15 +337,24 @@ func sanitizeNakedAmpersands(jsx string) string {
 
 func checkUnclosedAttributes(jsx string, baseOffset int, fullContent string) *Diagnostic {
 	lines := strings.Split(jsx, "\n")
+	inTag := false
 	for i, line := range lines {
-		// Look for unclosed quote in attr
+		// Look for unclosed quote in tag attributes
 		inQuote := false
 		quoteChar := rune(0)
 		for _, r := range line {
-			if r == '"' || r == '\'' {
+			if !inTag {
+				if r == '<' {
+					inTag = true
+				}
+			} else {
 				if !inQuote {
-					inQuote = true
-					quoteChar = r
+					if r == '>' {
+						inTag = false
+					} else if r == '"' || r == '\'' {
+						inQuote = true
+						quoteChar = r
+					}
 				} else if r == quoteChar {
 					inQuote = false
 				}

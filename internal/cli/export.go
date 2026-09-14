@@ -130,6 +130,26 @@ func ExportCmd() *cobra.Command {
 				return fmt.Errorf("export execution failed: %w", err)
 			}
 
+			// Copy CSS and WASM assets
+			_ = copyFile(filepath.Join(goksBuildDir, "app.css"), filepath.Join(absOut, "app.css"))
+			_ = copyFile(filepath.Join(goksBuildDir, "app.wasm"), filepath.Join(absOut, "app.wasm"))
+			_ = copyFile(filepath.Join(goksBuildDir, "wasm_exec.js"), filepath.Join(absOut, "wasm_exec.js"))
+
+			// Copy public static files
+			publicDir := filepath.Join(appDir, "public")
+			if _, err := os.Stat(publicDir); err == nil {
+				_ = filepath.Walk(publicDir, func(path string, info os.FileInfo, err error) error {
+					if err != nil || info.IsDir() {
+						return nil
+					}
+					rel, _ := filepath.Rel(publicDir, path)
+					dest := filepath.Join(absOut, rel)
+					_ = os.MkdirAll(filepath.Dir(dest), 0755)
+					_ = copyFile(path, dest)
+					return nil
+				})
+			}
+
 			fmt.Println(color.GreenString("\n  🎉 Export successful! Ready for static deployment."))
 			fmt.Printf("  %s %s\n", color.HiBlackString("Folder:"), absOut)
 			fmt.Printf("  %s %s\n", color.HiBlackString("Deploy:"), "Upload this folder to Cloudflare Pages, Netlify, Vercel, or GitHub Pages.")

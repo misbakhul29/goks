@@ -471,12 +471,16 @@ func (s *DevServer) serveShell(ctx *router.Context) error {
 		// Expand the root component tree
 		renderedNode := component.Expand(component.C(s.cfg.Root), func() {}, nil)
 
+		var meta metadata.Metadata
+		if renderedNode != nil && renderedNode.Tag == "html" {
+			meta = metadata.ExtractFromTree(component.C(s.cfg.Root))
+		}
+
 		// Restore path
 		router.CurrentPath.Set(originalPath)
 		ssrMutex.Unlock()
 
 		if renderedNode != nil && renderedNode.Tag == "html" {
-			meta := metadata.ExtractFromTree(component.C(s.cfg.Root))
 			if meta.Title == "" {
 				meta.Title = "GoKS App"
 			}

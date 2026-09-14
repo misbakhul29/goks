@@ -146,3 +146,16 @@ func Script(children ...any) *component.Node   { return Element("script", childr
 func Style(children ...any) *component.Node    { return Element("style", children...) }
 func Noscript(children ...any) *component.Node { return Element("noscript", children...) }
 func Base(children ...any) *component.Node     { return Element("base", children...) }
+
+// Code & Semantic Elements
+func Pre(children ...any) *component.Node        { return Element("pre", children...) }
+func Code(children ...any) *component.Node       { return Element("code", children...) }
+func Kbd(children ...any) *component.Node        { return Element("kbd", children...) }
+func Blockquote(children ...any) *component.Node { return Element("blockquote", children...) }
+func Details(children ...any) *component.Node    { return Element("details", children...) }
+func Summary(children ...any) *component.Node    { return Element("summary", children...) }
+func Time(children ...any) *component.Node       { return Element("time", children...) }
+func Picture(children ...any) *component.Node    { return Element("picture", children...) }
+func Source(children ...any) *component.Node     { return Element("source", children...) }
+func Video(children ...any) *component.Node      { return Element("video", children...) }
+func Audio(children ...any) *component.Node      { return Element("audio", children...) }
