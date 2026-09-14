@@ -2,6 +2,14 @@
 
 All notable changes to GoKS are documented in this file in accordance with [Keep a Changelog](https://keepachangelog.com/) and [Semantic Versioning](https://semver.org/).
 
+## [v1.1.1] - 2026-09-14
+
+### Added
+- **WASM func(string) Event Listener Support**: `Renderer.applyProps` now supports `func(string)` event listeners (e.g. `onInput`, `onChange`) to deliver target string values directly to Go component callbacks.
+- **Input Value Property Synchronization**: Virtual DOM patches on `<input>` and `<textarea>` elements now synchronize the DOM `value` property in addition to the attribute.
+
+---
+
 ## [v1.1.0] - 2026-09-14
 
 ### Added

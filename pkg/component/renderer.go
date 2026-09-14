@@ -259,6 +259,18 @@ func (r *Renderer) applyProps(el js.Value, newProps, oldProps Props) {
 			var jsFn js.Func
 			if fn, ok := v.(func(js.Value, []js.Value) any); ok {
 				jsFn = js.FuncOf(fn)
+			} else if fn, ok := v.(func(string)); ok {
+				jsFn = js.FuncOf(func(_ js.Value, args []js.Value) any {
+					var val string
+					if len(args) > 0 && !args[0].IsNull() && !args[0].IsUndefined() {
+						target := args[0].Get("target")
+						if !target.IsNull() && !target.IsUndefined() {
+							val = target.Get("value").String()
+						}
+					}
+					fn(val)
+					return nil
+				})
 			} else if fn, ok := v.(func()); ok {
 				jsFn = js.FuncOf(func(_ js.Value, _ []js.Value) any {
 					fn()
@@ -268,6 +280,9 @@ func (r *Renderer) applyProps(el js.Value, newProps, oldProps Props) {
 
 			listeners[event] = jsFn
 			el.Call("addEventListener", event, jsFn)
+		} else if k == "value" {
+			el.Set("value", fmt.Sprintf("%v", v))
+			el.Call("setAttribute", k, fmt.Sprintf("%v", v))
 		} else if k == "class" {
 			el.Set("className", fmt.Sprintf("%v", v))
 		} else if k == "style" {

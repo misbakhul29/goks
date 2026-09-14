@@ -200,6 +200,14 @@ func TestNeedsHydration(t *testing.T) {
 		t.Errorf("expected interactive node with onClick to need hydration")
 	}
 
+	// Interactive node with onInput func(string)
+	inputNode := component.H("input", component.Props{
+		"onInput": func(val string) {},
+	})
+	if !component.NeedsHydration(inputNode) {
+		t.Errorf("expected interactive node with onInput to need hydration")
+	}
+
 	// Nested interactive child
 	parent := component.H("div", nil, interactiveNode)
 	if !component.NeedsHydration(parent) {
