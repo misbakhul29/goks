@@ -248,12 +248,21 @@ func collectFieldPointers(rv reflect.Value, tagMap map[string]reflect.Value) {
 	}
 }
 
+// Dialect returns the database dialect.
+func (d *Database) Dialect() Dialect {
+	if d == nil || d.dialect == nil {
+		return sqliteDialect{}
+	}
+	return d.dialect
+}
+
 // -----------------------------------------------------------------------
 // Dialect
 // -----------------------------------------------------------------------
 
 // Dialect abstracts SQL differences between databases.
 type Dialect interface {
+	Name() string             // e.g. "postgres", "mysql", "sqlite"
 	Placeholder(n int) string // e.g. $1 (postgres) or ? (mysql/sqlite)
 	SupportsReturning() bool  // true for Postgres, false for MySQL/SQLite
 }
@@ -262,14 +271,17 @@ type postgresDialect struct{}
 type mysqlDialect struct{}
 type sqliteDialect struct{}
 
+func (postgresDialect) Name() string             { return "postgres" }
 func (postgresDialect) Placeholder(n int) string { return fmt.Sprintf("$%d", n) }
 func (postgresDialect) SupportsReturning() bool  { return true }
 
-func (mysqlDialect) Placeholder(_ int) string    { return "?" }
-func (mysqlDialect) SupportsReturning() bool     { return false }
+func (mysqlDialect) Name() string          { return "mysql" }
+func (mysqlDialect) Placeholder(_ int) string { return "?" }
+func (mysqlDialect) SupportsReturning() bool  { return false }
 
-func (sqliteDialect) Placeholder(_ int) string   { return "?" }
-func (sqliteDialect) SupportsReturning() bool    { return false }
+func (sqliteDialect) Name() string          { return "sqlite" }
+func (sqliteDialect) Placeholder(_ int) string { return "?" }
+func (sqliteDialect) SupportsReturning() bool  { return false }
 
 func dialectFor(driver string) Dialect {
 	switch driver {

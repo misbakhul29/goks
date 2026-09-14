@@ -305,7 +305,7 @@ func getGoKSVersion() string {
 			return info.Main.Version
 		}
 	}
-	return "v0.11.0"
+	return "v0.12.0"
 }
 
 func writeEntryGoMod(entryDir, appDir, moduleName string) error {

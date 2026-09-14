@@ -13,7 +13,7 @@ SQLite, PostgreSQL, MySQL, Server Actions.
 <div align="center">
 
 [![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?style=for-the-badge&logo=go&logoColor=white)](https://golang.org)
-[![Release](https://img.shields.io/badge/release-v0.11.0-6366F1?style=for-the-badge&logo=github)](https://github.com/misbakhul29/goks/releases)
+[![Release](https://img.shields.io/badge/release-v0.12.0-6366F1?style=for-the-badge&logo=github)](https://github.com/misbakhul29/goks/releases)
 [![License](https://img.shields.io/badge/license-MIT-10B981?style=for-the-badge)](LICENSE)
 [![WASM](https://img.shields.io/badge/WebAssembly-Enabled-654FF0?style=for-the-badge&logo=webassembly&logoColor=white)](https://webassembly.org)
 [![Tailwind](https://img.shields.io/badge/Tailwind_CSS-v4-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
@@ -21,7 +21,7 @@ SQLite, PostgreSQL, MySQL, Server Actions.
 **The Modern Fullstack Go Web Framework.**  
 *Backend APIs + WebAssembly Frontend, 100% Type-Safe Go. Zero Node.js or JavaScript Required.*
 
-[Getting Started](#-quick-start) • [Features](#-features) • [Why GoKS?](#-why-goks) • [UI Components](#-goks-ui-component-system) • [Image Optimizer](#-image-optimizer--component-uiimage) • [API Routes](#-file-based-api-route-handlers) • [Server Actions](#-progressive-server-actions-pkgaction) • [Deployment](#-deployment-guide)
+[Getting Started](#-quick-start) • [Features](#-features) • [Why GoKS?](#-why-goks) • [UI Components](#-goks-ui-component-system) • [Image Optimizer](#-image-optimizer--component-uiimage) • [API Routes](#-file-based-api-route-handlers) • [Database Migrations](#-database-migrations-cli-goks-db) • [Server Actions](#-progressive-server-actions-pkgaction) • [Deployment](#-deployment-guide)
 
 </div>
 
@@ -38,6 +38,7 @@ GoKS bridges the gap between modern React/Next.js developer ergonomics and the l
 | **Node.js / npm Required?** | **❌ No (Zero npm)** | ✅ Required | ❌ No | ❌ No |
 | **File-Based API Routes** | **✅ Built-in (`app/api/**/route.go`)** | ✅ Yes | ❌ No | ❌ Manual |
 | **Image Optimizer** | **✅ Built-in (`<ui.Image />` / `pkg/image`)** | ✅ `next/image` | ❌ None | ❌ None |
+| **Database Migrations** | **✅ Built-in (`goks db`)** | ⚠️ Prisma / Drizzle | ⚠️ Goose / Migrate | ❌ None |
 | **Server Actions** | **✅ Built-in (`pkg/action`)** | ✅ Yes | ⚠️ Partial (HTMX triggers) | ❌ Manual endpoints |
 | **Selective Hydration** | **✅ Islands (0-WASM static)** | ⚠️ Partial (React RSC) | ❌ N/A | ❌ N/A |
 | **Component Generator** | **✅ `goks ui` (shadcn-style)** | ✅ `shadcn/ui` | ❌ None | ❌ None |
@@ -50,6 +51,7 @@ GoKS bridges the gap between modern React/Next.js developer ergonomics and the l
 
 - **🚀 GOX Syntax (`.gox`):** Declarative, JSX-like markup directly inside Go (`<div><h1>{title}</h1></div>`, `<ui.Button />`). Compiled directly into Go code in an isolated workspace.
 - **🖼️ Image Optimizer & Component (`<ui.Image />` / `pkg/image`):** Automatic on-demand image resizing, high-performance pure Go bilinear interpolation, responsive `srcset` generation, `304 Not Modified` ETag caching, and layout shift (CLS) prevention.
+- **🗄️ Database Migrations CLI (`goks db`):** Full database lifecycle management (`make:migration`, `migrate`, `rollback`, `status`, `seed`) supporting SQLite, PostgreSQL, and MySQL with transactional atomicity and batch rollbacks.
 - **🌐 File-Based API Route Handlers (`app/api/**/route.go`):** Next.js App Router style backend API endpoints. Simply export standard HTTP method functions (`GET`, `POST`, `PUT`, `DELETE`, `PATCH`, `OPTIONS`, `HEAD`) with full path parameters (`:id` or `[id]`), query params, JSON body binding, and automatic recovery. API routes are strictly server-side and never bundled into client WASM.
 - **📦 Static Site Generation (SSG, `goks export`):** Pre-render your entire application to static HTML and deploy to Cloudflare Pages, GitHub Pages, Vercel, or AWS S3 with zero server running costs.
 - **🎨 `goks ui` Component System:** Built-in CLI generator inspired by `shadcn/ui`. Add accessible, styled Tailwind components (`button`, `input`, `card`, `dialog`, `badge`, `dropdown`, `table`) right into `components/ui/`.
@@ -480,6 +482,69 @@ Supports **SQLite**, **PostgreSQL**, and **MySQL**.
 
 ---
 
+## 🗄️ Database Migrations CLI (`goks db`)
+
+GoKS includes a full-featured, zero-dependency database migrations and seeding engine supporting **SQLite**, **PostgreSQL**, and **MySQL** with transactional atomicity and batch rollback tracking.
+
+### 1. Create a Migration
+Generate a timestamped SQL migration file inside `migrations/`:
+```bash
+goks db make:migration create_users_table
+# Creates: migrations/20260914120000_create_users_table.sql
+```
+
+Migration files contain forward (`Up`) and reverse (`Down`) SQL statements separated by `-- +goks Up` and `-- +goks Down`:
+```sql
+-- +goks Up
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- +goks Down
+DROP TABLE IF EXISTS users;
+```
+
+### 2. Run Pending Migrations
+Applies all pending migrations inside a single database transaction per file:
+```bash
+goks db migrate
+```
+This automatically initializes the `goks_migrations` tracking table and records each migration's timestamp and batch ID.
+
+### 3. Check Migration Status
+View migration history, batch IDs, and applied timestamps:
+```bash
+goks db status
+```
+```text
+  Migration                                Batch  Status
+  ----------------------------------------------------------------------
+  20260914120000_create_users_table.sql    1      Applied (2026-09-14 12:01:00)
+  20260914123000_create_posts_table.sql    1      Applied (2026-09-14 12:01:00)
+  20260914130000_add_avatar_to_users.sql   -      Pending
+```
+
+### 4. Rollback Migrations
+Revert the last batch of migrations (or specify `--steps=N`):
+```bash
+# Rollback last migration batch:
+goks db rollback
+
+# Rollback exactly 2 migrations:
+goks db rollback --steps=2
+```
+
+### 5. Seed Database
+Execute raw SQL seed files from `seeds/*.sql` in alphabetical order:
+```bash
+goks db seed
+```
+
+---
+
 ## ⌨️ CLI Reference
 
 | Command | Description |
@@ -492,6 +557,11 @@ Supports **SQLite**, **PostgreSQL**, and **MySQL**.
 | `goks generate model <Name>` | Scaffold an ORM model in `models/<name>.go` |
 | `goks ui list` | List all available UI components |
 | `goks ui add <name... \| all>` | Add styled Tailwind components to `components/ui/` |
+| `goks db make:migration <name>` | Scaffold a new timestamped SQL migration file |
+| `goks db migrate` | Run all pending migrations in atomic transactions |
+| `goks db rollback [--steps=N]` | Roll back the last batch or specified number of migrations |
+| `goks db status` | Display status of all migrations |
+| `goks db seed` | Run all SQL seeders from `seeds/` |
 | `goks export [-o out] [--serve]` | Export as 100% static HTML site (SSG) for Cloudflare/GitHub Pages |
 | `goks build [--compiler=tinygo]` | Compile WASM bundle, Tailwind CSS, and production server binary |
 | `goks build --standalone` | Build a **single self-contained binary** with all assets embedded |
