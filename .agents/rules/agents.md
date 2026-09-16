@@ -2,7 +2,7 @@
 trigger: always_on
 ---
 
-# Project Rules & Customizations (`clipper`)
+# Project Rules & Customizations
 
 ## Git Commit & Versioning Conventions
 
