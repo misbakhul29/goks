@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none">
+  <!-- Background: Go cyan (same solid bg works fine on light themes too) -->
+  <rect width="16" height="16" rx="2.5" fill="#00ADD8"/>
+
+  <!-- "G" glyph, white, bold -->
+  <text
+    x="6.2"
+    y="11.2"
+    font-family="'Arial Black', 'Helvetica Neue', Arial, sans-serif"
+    font-size="10"
+    font-weight="900"
+    fill="white"
+    letter-spacing="-0.5"
+  >G</text>
+
+  <!-- Bottom-right "{}" badge — deeper amber for light theme contrast -->
+  <rect x="8.5" y="9" width="7" height="6.5" rx="1.4" fill="#D97706"/>
+  <text
+    x="12"
+    y="13.3"
+    font-family="'Courier New', Courier, monospace"
+    font-size="4"
+    font-weight="bold"
+    fill="white"
+    text-anchor="middle"
+  >{}</text>
+</svg>
