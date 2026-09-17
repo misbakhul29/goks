@@ -203,4 +203,44 @@ func TestAction_CSRF_RefererAndSecFetchSite(t *testing.T) {
 	if rec3.Code != http.StatusSeeOther {
 		t.Fatalf("expected 303 See Other for same-origin Referer, got %d: %s", rec3.Code, rec3.Body.String())
 	}
+	if loc := rec3.Header().Get("Location"); loc != "/dashboard" {
+		t.Fatalf("expected redirect to /dashboard, got %q", loc)
+	}
+}
+
+func TestAction_SafeRedirectTarget(t *testing.T) {
+	handler := action.Handler()
+
+	form := url.Values{}
+	form.Set("name", "createItem")
+
+	// 1. Same-origin Referer with path and query string
+	req := httptest.NewRequest(http.MethodPost, "/__goks_action?name=createItem", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Referer", "http://localhost:3000/articles?page=2&filter=go")
+	req.Host = "localhost:3000"
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("expected 303, got %d", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/articles?page=2&filter=go" {
+		t.Fatalf("expected /articles?page=2&filter=go, got %q", loc)
+	}
+
+	// 2. Open redirect attempt via redirect query param
+	reqBad := httptest.NewRequest(http.MethodPost, "/__goks_action?name=createItem&redirect=//evil.com", strings.NewReader(form.Encode()))
+	reqBad.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	reqBad.Header.Set("Origin", "http://localhost:3000")
+	reqBad.Host = "localhost:3000"
+	recBad := httptest.NewRecorder()
+	handler.ServeHTTP(recBad, reqBad)
+
+	if recBad.Code != http.StatusSeeOther {
+		t.Fatalf("expected 303, got %d", recBad.Code)
+	}
+	if loc := recBad.Header().Get("Location"); loc != "/" {
+		t.Fatalf("expected open redirect to be sanitized to /, got %q", loc)
+	}
 }

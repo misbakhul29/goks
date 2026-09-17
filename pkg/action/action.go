@@ -173,18 +173,32 @@ func Handler() http.HandlerFunc {
 			targetURL = "/"
 		}
 
-		http.Redirect(w, r, safeRedirectTarget(targetURL), http.StatusSeeOther)
+		http.Redirect(w, r, safeRedirectTarget(r, targetURL), http.StatusSeeOther)
 	}
 }
 
-func safeRedirectTarget(rawTarget string) string {
+func safeRedirectTarget(r *http.Request, rawTarget string) string {
 	if rawTarget == "" || strings.ContainsAny(rawTarget, "\r\n\\") {
 		return "/"
 	}
 
 	target, err := url.Parse(rawTarget)
-	if err != nil || target.IsAbs() || target.Host != "" || target.User != nil ||
-		!strings.HasPrefix(target.Path, "/") || strings.HasPrefix(target.Path, "//") {
+	if err != nil || target.User != nil {
+		return "/"
+	}
+
+	// If absolute URL, verify same origin before redirecting
+	if target.IsAbs() || target.Host != "" {
+		if sameOriginReferer(r, rawTarget) {
+			uri := target.RequestURI()
+			if strings.HasPrefix(uri, "/") && !strings.HasPrefix(uri, "//") {
+				return uri
+			}
+		}
+		return "/"
+	}
+
+	if !strings.HasPrefix(target.Path, "/") || strings.HasPrefix(target.Path, "//") {
 		return "/"
 	}
 	return rawTarget
