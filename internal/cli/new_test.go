@@ -105,6 +105,16 @@ func TestScaffoldApp_E2E(t *testing.T) {
 		t.Errorf("go.mod missing expected module path: %s", string(goModBytes))
 	}
 
+	// Verify repository scaffold content
+	repoBytes, err := os.ReadFile(filepath.Join(appDir, "database/repositories/user_repo.go"))
+	if err != nil {
+		t.Fatalf("failed to read database/repositories/user_repo.go: %v", err)
+	}
+	repoContent := string(repoBytes)
+	if !strings.Contains(repoContent, "GetUsers()") || !strings.Contains(repoContent, modPath+"/database/models") {
+		t.Errorf("user_repo.go missing expected GetUsers method or model import: %s", repoContent)
+	}
+
 	// 4. Verify that generated .gox files successfully transpile
 	goxFiles := []string{
 		"app/layout.gox",

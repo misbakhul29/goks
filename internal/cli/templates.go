@@ -230,48 +230,53 @@ type User struct {
 
 var tmplExampleService = `package services
 
+import (
+	"{{.Module}}/database/models"
+	"{{.Module}}/database/repositories"
+)
+
 // UserService handles business logic for users.
 // Keep business rules here — not in handlers or repositories.
 //
 // Dependency injection pattern:
 //
-//	svc := services.NewUserService()
-//	err := svc.Register("Budi", "budi@example.com")
+//	repo := repositories.NewUserRepository()
+//	svc  := services.NewUserService(repo)
+//	users, err := svc.GetUsers()
 type UserService struct {
-	// Inject dependencies here:
-	// repo *repositories.UserRepository
-	// jwt  *auth.JWT
+	repo *repositories.UserRepository
 }
 
-func NewUserService() *UserService {
-	return &UserService{}
+func NewUserService(repo *repositories.UserRepository) *UserService {
+	return &UserService{
+		repo: repo,
+	}
+}
+
+// GetUsers retrieves all active users.
+func (s *UserService) GetUsers() ([]models.User, error) {
+	return s.repo.GetUsers()
 }
 
 // Register creates a new user account.
 // Add your validation, hashing, and business logic here.
 func (s *UserService) Register(name, email string) error {
-	// Example:
-	// if name == "" || email == "" {
-	//     return errors.New("name and email are required")
-	// }
-	// user := &models.User{Name: name, Email: email}
-	// return orm.Create(orm.DB, user)
-	return nil
+	user := &models.User{Name: name, Email: email}
+	return s.repo.Create(user)
 }
 `
 
 var tmplExampleRepository = `package repositories
 
+import (
+	"{{.Module}}/database/models"
+	"github.com/misbakhul29/goks/pkg/orm"
+)
+
 // UserRepository handles all database access for User models.
 // Services should call repositories — never touch orm.DB directly from services.
 //
 // GoKS ORM query examples:
-//
-//	// Find all users:
-//	users, _ := orm.Query[models.User]().Find()
-//
-//	// Find by condition:
-//	user, _ := orm.Query[models.User]().Where("email = $1", email).First()
 //
 //	// Paginate:
 //	users, _ := orm.Query[models.User]().OrderBy("created_at DESC").Limit(10).Offset(20).Find()
@@ -282,6 +287,26 @@ type UserRepository struct{}
 
 func NewUserRepository() *UserRepository {
 	return &UserRepository{}
+}
+
+// GetUsers returns all users from the database.
+func (r *UserRepository) GetUsers() ([]models.User, error) {
+	return orm.Query[models.User]().Find()
+}
+
+// GetUserByID finds a user by their primary key ID.
+func (r *UserRepository) GetUserByID(id uint) (*models.User, error) {
+	return orm.Query[models.User]().Where("id = $1", id).First()
+}
+
+// GetUserByEmail finds a user by their email address.
+func (r *UserRepository) GetUserByEmail(email string) (*models.User, error) {
+	return orm.Query[models.User]().Where("email = $1", email).First()
+}
+
+// Create inserts a new user record.
+func (r *UserRepository) Create(user *models.User) error {
+	return orm.Create(orm.DB, user)
 }
 `
 
