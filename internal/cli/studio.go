@@ -52,9 +52,15 @@ func StudioCmd() *cobra.Command {
 			}
 			_ = l.Close()
 
+			appDB, _ := connectDB(appDir)
+			if appDB != nil && appDB.Raw() != nil {
+				defer appDB.Raw().Close()
+			}
+
 			studioHandler := studio.New(studio.Config{
 				AppDir:  appDir,
 				DevMode: true,
+				DB:      appDB,
 			})
 
 			mux := http.NewServeMux()

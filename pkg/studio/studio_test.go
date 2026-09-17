@@ -1,10 +1,13 @@
 package studio
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/misbakhul29/goks/internal/version"
@@ -178,5 +181,117 @@ func TestStudio_DBSecurity_SQLInjection(t *testing.T) {
 		if rec.Code != http.StatusBadRequest {
 			t.Errorf("Expected 400 Bad Request for malicious table name %q, got %d", name, rec.Code)
 		}
+	}
+}
+
+func TestStudio_Database_TablesAndRows(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "app.db")
+
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("failed to open sqlite: %v", err)
+	}
+	defer db.Close()
+
+	if _, err := db.Exec(`CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT); INSERT INTO users (name, email) VALUES ('Budi', 'budi@example.com');`); err != nil {
+		t.Fatalf("failed to create table: %v", err)
+	}
+
+	st := New(Config{
+		AppDir:  tmpDir,
+		DevMode: true,
+	})
+
+	// 1. Check tables API
+	req := httptest.NewRequest("GET", "/__goks/api/db/tables", nil)
+	rec := httptest.NewRecorder()
+	st.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Expected 200 for tables API, got %d", rec.Code)
+	}
+	var tables []string
+	if err := json.NewDecoder(rec.Body).Decode(&tables); err != nil {
+		t.Fatalf("failed to decode tables: %v", err)
+	}
+	if len(tables) != 1 || tables[0] != "users" {
+		t.Fatalf("Expected ['users'], got %v", tables)
+	}
+
+	// 2. Check table rows API
+	req = httptest.NewRequest("GET", "/__goks/api/db/table?name=users", nil)
+	rec = httptest.NewRecorder()
+	st.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Expected 200 for table rows API, got %d", rec.Code)
+	}
+	var res map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&res); err != nil {
+		t.Fatalf("failed to decode table rows: %v", err)
+	}
+	if int(res["total"].(float64)) != 1 {
+		t.Fatalf("Expected 1 total row, got %v", res["total"])
+	}
+}
+
+func TestStudio_Migrations_DatabaseFolder(t *testing.T) {
+	tmpDir := t.TempDir()
+	migDir := filepath.Join(tmpDir, "database", "migrations")
+	if err := os.MkdirAll(migDir, 0755); err != nil {
+		t.Fatalf("failed to create migrations dir: %v", err)
+	}
+
+	migFile := filepath.Join(migDir, "20260917130913_user.sql")
+	if err := os.WriteFile(migFile, []byte("-- UP\nCREATE TABLE users (id INT);\n-- DOWN\nDROP TABLE users;"), 0644); err != nil {
+		t.Fatalf("failed to write migration file: %v", err)
+	}
+
+	dbPath := filepath.Join(tmpDir, "database", "app.db")
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("failed to open sqlite: %v", err)
+	}
+	defer db.Close()
+
+	if _, err := db.Exec(`CREATE TABLE goks_migrations (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		version TEXT NOT NULL UNIQUE,
+		name TEXT NOT NULL,
+		batch INTEGER NOT NULL,
+		applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
+	INSERT INTO goks_migrations (version, name, batch) VALUES ('20260917130913', 'user', 1);`); err != nil {
+		t.Fatalf("failed to setup migrations table: %v", err)
+	}
+
+	st := New(Config{
+		AppDir:  tmpDir,
+		DevMode: true,
+	})
+
+	req := httptest.NewRequest("GET", "/__goks/api/migrations", nil)
+	rec := httptest.NewRecorder()
+	st.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Expected 200 for migrations API, got %d", rec.Code)
+	}
+	var migs []map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&migs); err != nil {
+		t.Fatalf("failed to decode migrations: %v", err)
+	}
+	if len(migs) != 1 {
+		t.Fatalf("Expected 1 migration, got %d", len(migs))
+	}
+	if migs[0]["name"] != "20260917130913_user.sql" {
+		t.Errorf("Expected migration name 20260917130913_user.sql, got %v", migs[0]["name"])
+	}
+	if migs[0]["applied"] != true {
+		t.Errorf("Expected migration to be applied = true, got %v", migs[0]["applied"])
+	}
+	if int(migs[0]["batch"].(float64)) != 1 {
+		t.Errorf("Expected batch = 1, got %v", migs[0]["batch"])
 	}
 }
