@@ -1,15 +1,25 @@
 package orm
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"strings"
 	"time"
 )
 
-// Create inserts a new model into the database.
-// It sets ID, CreatedAt, and UpdatedAt via reflection.
+// Create inserts a new model into the database using context.Background.
 func Create[T any](db *Database, m *T) error {
+	return CreateContext(context.Background(), db, m)
+}
+
+// CreateContext inserts a new model into the database with context.
+// It triggers BeforeCreate and AfterCreate hooks if implemented by the model.
+// It sets ID, CreatedAt, and UpdatedAt via reflection.
+func CreateContext[T any](ctx context.Context, db *Database, m *T) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if db == nil {
 		db = DB
 	}
@@ -20,6 +30,11 @@ func Create[T any](db *Database, m *T) error {
 	if dialect == nil {
 		dialect = dialectFor("sqlite")
 	}
+
+	if err := invokeBeforeCreate(ctx, m); err != nil {
+		return fmt.Errorf("goks/orm: BeforeCreate: %w", err)
+	}
+
 	rv := reflect.ValueOf(m).Elem()
 	rt := rv.Type()
 
@@ -93,7 +108,7 @@ func Create[T any](db *Database, m *T) error {
 			strings.Join(cols, ", "),
 			strings.Join(placeholders, ", "),
 		)
-		err := db.db.QueryRow(query, vals...).Scan(&id)
+		err := db.db.QueryRowContext(ctx, query, vals...).Scan(&id)
 		if err != nil {
 			return fmt.Errorf("goks/orm: Create: %w", err)
 		}
@@ -104,7 +119,7 @@ func Create[T any](db *Database, m *T) error {
 			strings.Join(cols, ", "),
 			strings.Join(placeholders, ", "),
 		)
-		res, err := db.db.Exec(query, vals...)
+		res, err := db.db.ExecContext(ctx, query, vals...)
 		if err != nil {
 			return fmt.Errorf("goks/orm: Create: %w", err)
 		}
@@ -127,11 +142,20 @@ func Create[T any](db *Database, m *T) error {
 		idField.SetUint(uint64(id))
 	}
 
+	if err := invokeAfterCreate(ctx, m); err != nil {
+		return fmt.Errorf("goks/orm: AfterCreate: %w", err)
+	}
+
 	return nil
 }
 
 // Save inserts or updates a model based on whether its ID is set.
 func Save[T any](db *Database, m *T) error {
+	return SaveContext(context.Background(), db, m)
+}
+
+// SaveContext inserts or updates a model with context.
+func SaveContext[T any](ctx context.Context, db *Database, m *T) error {
 	if db == nil {
 		db = DB
 	}
@@ -147,13 +171,22 @@ func Save[T any](db *Database, m *T) error {
 	}
 
 	if idField.IsValid() && idField.Uint() == 0 {
-		return Create(db, m)
+		return CreateContext(ctx, db, m)
 	}
-	return update(db, m)
+	return UpdateContext(ctx, db, m)
 }
 
-// update performs a full UPDATE on an existing model.
-func update[T any](db *Database, m *T) error {
+// Update updates an existing model in the database using context.Background.
+func Update[T any](db *Database, m *T) error {
+	return UpdateContext(context.Background(), db, m)
+}
+
+// UpdateContext updates an existing model in the database with context.
+// It triggers BeforeUpdate and AfterUpdate hooks if implemented by the model.
+func UpdateContext[T any](ctx context.Context, db *Database, m *T) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if db == nil || db.db == nil {
 		return fmt.Errorf("goks/orm: database connection not initialized")
 	}
@@ -161,6 +194,11 @@ func update[T any](db *Database, m *T) error {
 	if dialect == nil {
 		dialect = dialectFor("sqlite")
 	}
+
+	if err := invokeBeforeUpdate(ctx, m); err != nil {
+		return fmt.Errorf("goks/orm: BeforeUpdate: %w", err)
+	}
+
 	rv := reflect.ValueOf(m).Elem()
 	rt := rv.Type()
 
@@ -219,15 +257,29 @@ func update[T any](db *Database, m *T) error {
 		dialect.Placeholder(n),
 	)
 
-	_, err := db.db.Exec(query, vals...)
+	_, err := db.db.ExecContext(ctx, query, vals...)
 	if err != nil {
 		return fmt.Errorf("goks/orm: Save: %w", err)
 	}
+
+	if err := invokeAfterUpdate(ctx, m); err != nil {
+		return fmt.Errorf("goks/orm: AfterUpdate: %w", err)
+	}
+
 	return nil
 }
 
-// Delete performs a soft-delete by setting deleted_at to now.
+// Delete performs a soft-delete by setting deleted_at to now using context.Background.
 func Delete[T any](db *Database, m *T) error {
+	return DeleteContext(context.Background(), db, m)
+}
+
+// DeleteContext performs a soft-delete with context.
+// It triggers BeforeDelete and AfterDelete hooks if implemented by the model.
+func DeleteContext[T any](ctx context.Context, db *Database, m *T) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if db == nil {
 		db = DB
 	}
@@ -238,6 +290,11 @@ func Delete[T any](db *Database, m *T) error {
 	if dialect == nil {
 		dialect = dialectFor("sqlite")
 	}
+
+	if err := invokeBeforeDelete(ctx, m); err != nil {
+		return fmt.Errorf("goks/orm: BeforeDelete: %w", err)
+	}
+
 	rv := reflect.ValueOf(m).Elem()
 
 	var id uint
@@ -267,18 +324,44 @@ func Delete[T any](db *Database, m *T) error {
 		dialect.Placeholder(1),
 		dialect.Placeholder(2),
 	)
-	_, err := db.db.Exec(query, now, id)
+	_, err := db.db.ExecContext(ctx, query, now, id)
 	if err != nil {
 		return fmt.Errorf("goks/orm: Delete: %w", err)
 	}
+
+	if err := invokeAfterDelete(ctx, m); err != nil {
+		return fmt.Errorf("goks/orm: AfterDelete: %w", err)
+	}
+
 	return nil
 }
 
-// HardDelete permanently removes a record from the database.
+// HardDelete permanently removes a record from the database using context.Background.
 func HardDelete[T any](db *Database, m *T) error {
+	return HardDeleteContext(context.Background(), db, m)
+}
+
+// HardDeleteContext permanently removes a record from the database with context.
+// It triggers BeforeDelete and AfterDelete hooks if implemented by the model.
+func HardDeleteContext[T any](ctx context.Context, db *Database, m *T) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if db == nil {
 		db = DB
 	}
+	if db == nil || db.db == nil {
+		return fmt.Errorf("goks/orm: database connection not initialized")
+	}
+	dialect := db.dialect
+	if dialect == nil {
+		dialect = dialectFor("sqlite")
+	}
+
+	if err := invokeBeforeDelete(ctx, m); err != nil {
+		return fmt.Errorf("goks/orm: BeforeDelete: %w", err)
+	}
+
 	rv := reflect.ValueOf(m).Elem()
 	var id uint
 
@@ -294,40 +377,40 @@ func HardDelete[T any](db *Database, m *T) error {
 	}
 
 	table := tableNameOf(m)
-	query := fmt.Sprintf("DELETE FROM %s WHERE id = %s", table, db.dialect.Placeholder(1))
-	_, err := db.db.Exec(query, id)
+	query := fmt.Sprintf("DELETE FROM %s WHERE id = %s", table, dialect.Placeholder(1))
+	_, err := db.db.ExecContext(ctx, query, id)
 	if err != nil {
 		return fmt.Errorf("goks/orm: HardDelete: %w", err)
 	}
+
+	if err := invokeAfterDelete(ctx, m); err != nil {
+		return fmt.Errorf("goks/orm: AfterDelete: %w", err)
+	}
+
 	return nil
 }
 
-// dbTag extracts the `db` struct tag value for a field.
-func dbTag(f reflect.StructField) string {
-	tag := f.Tag.Get("db")
-	if tag == "" {
-		return camelToSnake(f.Name)
-	}
-	return tag
-}
-
-// camelToSnake converts CamelCase to snake_case.
-func camelToSnake(s string) string {
-	var result strings.Builder
-	for i, r := range s {
-		if r >= 'A' && r <= 'Z' && i > 0 {
-			result.WriteByte('_')
-		}
-		result.WriteRune(r | 32) // toLower
-	}
-	return result.String()
-}
-
-// Restore un-deletes a soft-deleted model by clearing deleted_at.
+// Restore un-deletes a soft-deleted model by clearing deleted_at using context.Background.
 func Restore[T any](db *Database, m *T) error {
+	return RestoreContext(context.Background(), db, m)
+}
+
+// RestoreContext un-deletes a soft-deleted model by clearing deleted_at with context.
+func RestoreContext[T any](ctx context.Context, db *Database, m *T) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if db == nil {
 		db = DB
 	}
+	if db == nil || db.db == nil {
+		return fmt.Errorf("goks/orm: database connection not initialized")
+	}
+	dialect := db.dialect
+	if dialect == nil {
+		dialect = dialectFor("sqlite")
+	}
+
 	rv := reflect.ValueOf(m).Elem()
 
 	var id uint
@@ -352,12 +435,46 @@ func Restore[T any](db *Database, m *T) error {
 		return fmt.Errorf("goks/orm: invalid table identifier: %s", table)
 	}
 
-	query := fmt.Sprintf("UPDATE %s SET deleted_at = NULL WHERE id = %s", table, db.dialect.Placeholder(1))
-	_, err := db.db.Exec(query, id)
+	query := fmt.Sprintf("UPDATE %s SET deleted_at = NULL WHERE id = %s", table, dialect.Placeholder(1))
+	_, err := db.db.ExecContext(ctx, query, id)
 	if err != nil {
 		return fmt.Errorf("goks/orm: Restore: %w", err)
 	}
 	return nil
+}
+
+// FindByID retrieves a single model by its primary key ID using context.Background.
+func FindByID[T any](db *Database, id any) (*T, error) {
+	return FindByIDContext[T](context.Background(), db, id)
+}
+
+// FindByIDContext retrieves a single model by its primary key ID with context.
+func FindByIDContext[T any](ctx context.Context, db *Database, id any) (*T, error) {
+	return Query[T](db).WithContext(ctx).Where("id = ?", id).First()
+}
+
+// dbTag extracts the `db` struct tag value for a field.
+func dbTag(f reflect.StructField) string {
+	tag := f.Tag.Get("db")
+	if tag == "-" {
+		return ""
+	}
+	if tag == "" {
+		return camelToSnake(f.Name)
+	}
+	return tag
+}
+
+// camelToSnake converts CamelCase to snake_case.
+func camelToSnake(s string) string {
+	var result strings.Builder
+	for i, r := range s {
+		if r >= 'A' && r <= 'Z' && i > 0 {
+			result.WriteByte('_')
+		}
+		result.WriteRune(r | 32) // toLower
+	}
+	return result.String()
 }
 
 func isValidSQLIdentifier(ident string) bool {

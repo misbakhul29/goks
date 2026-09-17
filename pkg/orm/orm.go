@@ -101,6 +101,11 @@ func (d *Database) Transaction(ctx context.Context, fn func(tx *sql.Tx) error) (
 	return nil
 }
 
+// TransactionContext executes fn within an ACID transaction with context.
+func (d *Database) TransactionContext(ctx context.Context, fn func(tx *sql.Tx) error) error {
+	return d.Transaction(ctx, fn)
+}
+
 // -----------------------------------------------------------------------
 // Query builder
 // -----------------------------------------------------------------------
@@ -191,7 +196,7 @@ func (b *Builder[T]) Find() ([]T, error) {
 		return nil, fmt.Errorf("goks/orm: find: %w", err)
 	}
 	defer rows.Close()
-	return scanRows[T](rows)
+	return scanRows[T](b.context(), rows)
 }
 
 // First returns the first matching row.
@@ -274,8 +279,8 @@ func tableNameOf(v any) string {
 	return strings.ToLower(name) + "s"
 }
 
-// scanRows scans sql.Rows into a slice of T using reflection.
-func scanRows[T any](rows *sql.Rows) ([]T, error) {
+// scanRows scans sql.Rows into a slice of T using reflection and triggers AfterFind hooks.
+func scanRows[T any](ctx context.Context, rows *sql.Rows) ([]T, error) {
 	cols, err := rows.Columns()
 	if err != nil {
 		return nil, err
@@ -286,6 +291,9 @@ func scanRows[T any](rows *sql.Rows) ([]T, error) {
 		ptrs := fieldPointers(&item, cols)
 		if err := rows.Scan(ptrs...); err != nil {
 			return nil, err
+		}
+		if err := invokeAfterFind(ctx, &item); err != nil {
+			return nil, fmt.Errorf("goks/orm: AfterFind: %w", err)
 		}
 		results = append(results, item)
 	}
@@ -322,6 +330,9 @@ func collectFieldPointers(rv reflect.Value, tagMap map[string]reflect.Value) {
 			continue
 		}
 		tag := field.Tag.Get("db")
+		if tag == "-" {
+			continue
+		}
 		if tag == "" {
 			tag = strings.ToLower(field.Name)
 		}
