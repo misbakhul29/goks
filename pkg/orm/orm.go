@@ -27,6 +27,11 @@ type Model struct {
 	DeletedAt *time.Time `db:"deleted_at"` // soft-delete support
 }
 
+// TableNamer allows models to specify a custom database table name.
+type TableNamer interface {
+	TableName() string
+}
+
 // IsNew returns true if the model has not been saved to the database yet.
 func (m *Model) IsNew() bool {
 	return m.ID == 0
@@ -121,6 +126,20 @@ type Builder[T any] struct {
 	limitVal       int
 	offsetVal      int
 	includeDeleted bool
+	ctx            context.Context
+}
+
+// WithContext sets the context.Context for database operations.
+func (b *Builder[T]) WithContext(ctx context.Context) *Builder[T] {
+	b.ctx = ctx
+	return b
+}
+
+func (b *Builder[T]) context() context.Context {
+	if b.ctx != nil {
+		return b.ctx
+	}
+	return context.Background()
 }
 
 // WithTrashed includes soft-deleted rows in the query.
@@ -163,8 +182,11 @@ func (b *Builder[T]) Offset(n int) *Builder[T] {
 
 // Find executes a SELECT and returns all matching rows.
 func (b *Builder[T]) Find() ([]T, error) {
+	if b.db == nil || b.db.db == nil {
+		return nil, fmt.Errorf("goks/orm: database connection not initialized")
+	}
 	query := b.buildSelect("*")
-	rows, err := b.db.db.Query(query, b.args...)
+	rows, err := b.db.db.QueryContext(b.context(), query, b.args...)
 	if err != nil {
 		return nil, fmt.Errorf("goks/orm: find: %w", err)
 	}
@@ -174,8 +196,11 @@ func (b *Builder[T]) Find() ([]T, error) {
 
 // First returns the first matching row.
 func (b *Builder[T]) First() (*T, error) {
+	if b.db == nil || b.db.db == nil {
+		return nil, fmt.Errorf("goks/orm: database connection not initialized")
+	}
 	b.limitVal = 1
-	rows, err := b.Limit(1).Find()
+	rows, err := b.Find()
 	if err != nil {
 		return nil, err
 	}
@@ -187,9 +212,12 @@ func (b *Builder[T]) First() (*T, error) {
 
 // Count returns the number of matching rows.
 func (b *Builder[T]) Count() (int64, error) {
+	if b.db == nil || b.db.db == nil {
+		return 0, fmt.Errorf("goks/orm: database connection not initialized")
+	}
 	query := b.buildSelect("COUNT(*)")
 	var count int64
-	err := b.db.db.QueryRow(query, b.args...).Scan(&count)
+	err := b.db.db.QueryRowContext(b.context(), query, b.args...).Scan(&count)
 	return count, err
 }
 
@@ -221,14 +249,28 @@ func (b *Builder[T]) buildSelect(cols string) string {
 // -----------------------------------------------------------------------
 
 // tableNameOf derives the table name from a model struct type.
-// e.g. *User → "users"
+// If the model implements TableNamer, its TableName() is used.
+// e.g. *User → "users", or *Category implementing TableName() -> "categories"
 func tableNameOf(v any) string {
+	if tn, ok := v.(TableNamer); ok {
+		if name := tn.TableName(); name != "" {
+			return name
+		}
+	}
 	t := reflect.TypeOf(v)
 	if t.Kind() == reflect.Ptr {
 		t = t.Elem()
+	} else {
+		// Check pointer receiver
+		ptrVal := reflect.New(t).Interface()
+		if tn, ok := ptrVal.(TableNamer); ok {
+			if name := tn.TableName(); name != "" {
+				return name
+			}
+		}
 	}
 	name := t.Name()
-	// Simple pluralisation: append 's' (good enough for MVP)
+	// Simple pluralisation: append 's' (fallback)
 	return strings.ToLower(name) + "s"
 }
 

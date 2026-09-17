@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"unicode"
 )
 
 // PrepareWorkspace mirrors user code to .goks/workspace, transpiling .gox files to .go
@@ -429,11 +430,11 @@ func formatGoNode(tag string, attrs []xml.Attr, inner string, placeholders map[s
 		return fmt.Sprintf("component.Fragment(%s)", inner)
 	}
 
-	isComponent := strings.Contains(tag, ".")
+	isComponent := strings.Contains(tag, ".") || (len(tag) > 0 && unicode.IsUpper(rune(tag[0])))
 
 	var goTag string
 	if isComponent {
-		goTag = tag // e.g. c.Hero
+		goTag = tag // e.g. c.Hero or Button
 	} else {
 		goTag = "html." + strings.ToUpper(tag[0:1]) + tag[1:]
 	}
@@ -446,13 +447,20 @@ func formatGoNode(tag string, attrs []xml.Attr, inner string, placeholders map[s
 			return attrs[i].Name.Local < attrs[j].Name.Local
 		})
 		props := []string{}
+		hasChildrenProp := false
 		for _, a := range attrs {
+			if a.Name.Local == "Children" {
+				hasChildrenProp = true
+			}
 			val := a.Value
 			if expr, isDynamic := resolveAttrVal(val, placeholders); isDynamic {
 				props = append(props, fmt.Sprintf("%s: %s", a.Name.Local, expr))
 			} else {
 				props = append(props, fmt.Sprintf("%s: %q", a.Name.Local, val))
 			}
+		}
+		if inner != "" && !hasChildrenProp {
+			props = append(props, fmt.Sprintf("Children: component.Fragment(%s)", inner))
 		}
 		res = fmt.Sprintf("component.C(&%s{%s})", goTag, strings.Join(props, ", "))
 	} else {

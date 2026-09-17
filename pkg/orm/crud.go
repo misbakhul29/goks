@@ -13,6 +13,13 @@ func Create[T any](db *Database, m *T) error {
 	if db == nil {
 		db = DB
 	}
+	if db == nil || db.db == nil {
+		return fmt.Errorf("goks/orm: database connection not initialized")
+	}
+	dialect := db.dialect
+	if dialect == nil {
+		dialect = dialectFor("sqlite")
+	}
 	rv := reflect.ValueOf(m).Elem()
 	rt := rv.Type()
 
@@ -39,7 +46,7 @@ func Create[T any](db *Database, m *T) error {
 				if col == "created_at" || col == "updated_at" {
 					subVal.Set(reflect.ValueOf(now))
 					cols = append(cols, col)
-					placeholders = append(placeholders, db.dialect.Placeholder(n))
+					placeholders = append(placeholders, dialect.Placeholder(n))
 					vals = append(vals, now)
 					n++
 					continue
@@ -51,7 +58,7 @@ func Create[T any](db *Database, m *T) error {
 					continue
 				}
 				cols = append(cols, col)
-				placeholders = append(placeholders, db.dialect.Placeholder(n))
+				placeholders = append(placeholders, dialect.Placeholder(n))
 				vals = append(vals, subVal.Interface())
 				n++
 			}
@@ -63,7 +70,7 @@ func Create[T any](db *Database, m *T) error {
 			continue
 		}
 		cols = append(cols, col)
-		placeholders = append(placeholders, db.dialect.Placeholder(n))
+		placeholders = append(placeholders, dialect.Placeholder(n))
 		vals = append(vals, fv.Interface())
 		n++
 	}
@@ -79,7 +86,7 @@ func Create[T any](db *Database, m *T) error {
 	}
 	var id uint
 
-	if db.dialect != nil && db.dialect.SupportsReturning() {
+	if dialect != nil && dialect.SupportsReturning() {
 		query := fmt.Sprintf(
 			"INSERT INTO %s (%s) VALUES (%s) RETURNING id",
 			table,
@@ -147,6 +154,13 @@ func Save[T any](db *Database, m *T) error {
 
 // update performs a full UPDATE on an existing model.
 func update[T any](db *Database, m *T) error {
+	if db == nil || db.db == nil {
+		return fmt.Errorf("goks/orm: database connection not initialized")
+	}
+	dialect := db.dialect
+	if dialect == nil {
+		dialect = dialectFor("sqlite")
+	}
 	rv := reflect.ValueOf(m).Elem()
 	rt := rv.Type()
 
@@ -173,7 +187,7 @@ func update[T any](db *Database, m *T) error {
 				}
 				if col == "updated_at" {
 					subVal.Set(reflect.ValueOf(now))
-					setParts = append(setParts, fmt.Sprintf("%s = %s", col, db.dialect.Placeholder(n)))
+					setParts = append(setParts, fmt.Sprintf("%s = %s", col, dialect.Placeholder(n)))
 					vals = append(vals, now)
 					n++
 					continue
@@ -181,7 +195,7 @@ func update[T any](db *Database, m *T) error {
 				if !subVal.CanInterface() {
 					continue
 				}
-				setParts = append(setParts, fmt.Sprintf("%s = %s", col, db.dialect.Placeholder(n)))
+				setParts = append(setParts, fmt.Sprintf("%s = %s", col, dialect.Placeholder(n)))
 				vals = append(vals, subVal.Interface())
 				n++
 			}
@@ -191,7 +205,7 @@ func update[T any](db *Database, m *T) error {
 		if col == "" || !fv.CanInterface() {
 			continue
 		}
-		setParts = append(setParts, fmt.Sprintf("%s = %s", col, db.dialect.Placeholder(n)))
+		setParts = append(setParts, fmt.Sprintf("%s = %s", col, dialect.Placeholder(n)))
 		vals = append(vals, fv.Interface())
 		n++
 	}
@@ -202,7 +216,7 @@ func update[T any](db *Database, m *T) error {
 		"UPDATE %s SET %s WHERE id = %s",
 		table,
 		strings.Join(setParts, ", "),
-		db.dialect.Placeholder(n),
+		dialect.Placeholder(n),
 	)
 
 	_, err := db.db.Exec(query, vals...)
@@ -216,6 +230,13 @@ func update[T any](db *Database, m *T) error {
 func Delete[T any](db *Database, m *T) error {
 	if db == nil {
 		db = DB
+	}
+	if db == nil || db.db == nil {
+		return fmt.Errorf("goks/orm: database connection not initialized")
+	}
+	dialect := db.dialect
+	if dialect == nil {
+		dialect = dialectFor("sqlite")
 	}
 	rv := reflect.ValueOf(m).Elem()
 
@@ -243,8 +264,8 @@ func Delete[T any](db *Database, m *T) error {
 	query := fmt.Sprintf(
 		"UPDATE %s SET deleted_at = %s WHERE id = %s",
 		table,
-		db.dialect.Placeholder(1),
-		db.dialect.Placeholder(2),
+		dialect.Placeholder(1),
+		dialect.Placeholder(2),
 	)
 	_, err := db.db.Exec(query, now, id)
 	if err != nil {
