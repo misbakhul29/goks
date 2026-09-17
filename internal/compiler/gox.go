@@ -345,6 +345,7 @@ func parseXMLToGo(xmlStr string) (string, error) {
 	// Pre-process: replace ={...} attribute expressions with safe placeholders
 	// so the XML decoder doesn't trip over quotes or special chars inside {}.
 	processed, placeholders := extractAttrExprs(xmlStr)
+	processed = normalizeBooleanAttrs(processed)
 
 	d := xml.NewDecoder(strings.NewReader(processed))
 	// Allow unescaped HTML characters and unknown entities
@@ -353,6 +354,99 @@ func parseXMLToGo(xmlStr string) (string, error) {
 	d.Entity = xml.HTMLEntity
 
 	return parseNode(d, placeholders)
+}
+
+func normalizeBooleanAttrs(s string) string {
+	var res strings.Builder
+	i := 0
+	n := len(s)
+	for i < n {
+		if s[i] == '<' && i+1 < n {
+			if s[i+1] == '!' || s[i+1] == '/' {
+				res.WriteByte(s[i])
+				i++
+				continue
+			}
+			// Opening or self-closing tag
+			res.WriteByte('<')
+			i++
+			// Read tag name
+			for i < n && (unicode.IsLetter(rune(s[i])) || unicode.IsDigit(rune(s[i])) || s[i] == '.' || s[i] == '_' || s[i] == ':' || s[i] == '-') {
+				res.WriteByte(s[i])
+				i++
+			}
+			// Scan attributes until '>'
+			for i < n && s[i] != '>' {
+				if s[i] == ' ' || s[i] == '\t' || s[i] == '\r' || s[i] == '\n' {
+					res.WriteByte(s[i])
+					i++
+					continue
+				}
+				if s[i] == '/' {
+					res.WriteByte(s[i])
+					i++
+					continue
+				}
+				// Start of an attribute name
+				attrStart := i
+				for i < n && (unicode.IsLetter(rune(s[i])) || unicode.IsDigit(rune(s[i])) || s[i] == '_' || s[i] == ':' || s[i] == '-') {
+					i++
+				}
+				attrName := s[attrStart:i]
+				res.WriteString(attrName)
+
+				// Skip whitespace after attr name
+				wsStart := i
+				for i < n && (s[i] == ' ' || s[i] == '\t' || s[i] == '\r' || s[i] == '\n') {
+					i++
+				}
+				ws := s[wsStart:i]
+
+				if i < n && s[i] == '=' {
+					res.WriteString(ws)
+					res.WriteByte('=')
+					i++
+					// Skip whitespace after =
+					for i < n && (s[i] == ' ' || s[i] == '\t' || s[i] == '\r' || s[i] == '\n') {
+						res.WriteByte(s[i])
+						i++
+					}
+					// Read attribute value
+					if i < n && (s[i] == '"' || s[i] == '\'') {
+						q := s[i]
+						res.WriteByte(q)
+						i++
+						for i < n && s[i] != q {
+							if s[i] == '\\' {
+								res.WriteByte(s[i])
+								i++
+							}
+							if i < n {
+								res.WriteByte(s[i])
+								i++
+							}
+						}
+						if i < n {
+							res.WriteByte(s[i])
+							i++
+						}
+					}
+				} else {
+					// Standalone attribute without = (boolean shorthand)
+					res.WriteString(`="__GOKS_BOOL_TRUE__"`)
+					res.WriteString(ws)
+				}
+			}
+			if i < n && s[i] == '>' {
+				res.WriteByte('>')
+				i++
+			}
+		} else {
+			res.WriteByte(s[i])
+			i++
+		}
+	}
+	return res.String()
 }
 
 func parseNode(d *xml.Decoder, placeholders map[string]string) (string, error) {
@@ -453,7 +547,9 @@ func formatGoNode(tag string, attrs []xml.Attr, inner string, placeholders map[s
 				hasChildrenProp = true
 			}
 			val := a.Value
-			if expr, isDynamic := resolveAttrVal(val, placeholders); isDynamic {
+			if val == "__GOKS_BOOL_TRUE__" {
+				props = append(props, fmt.Sprintf("%s: true", a.Name.Local))
+			} else if expr, isDynamic := resolveAttrVal(val, placeholders); isDynamic {
 				props = append(props, fmt.Sprintf("%s: %s", a.Name.Local, expr))
 			} else {
 				props = append(props, fmt.Sprintf("%s: %q", a.Name.Local, val))
@@ -477,7 +573,9 @@ func formatGoNode(tag string, attrs []xml.Attr, inner string, placeholders map[s
 			val := a.Value
 			expr, isDynamic := resolveAttrVal(val, placeholders)
 
-			if name == "class" {
+			if val == "__GOKS_BOOL_TRUE__" {
+				res += fmt.Sprintf(`.Attr(%q, true)`, name)
+			} else if name == "class" {
 				if isDynamic {
 					res += fmt.Sprintf(`.Class(%s)`, expr)
 				} else {
