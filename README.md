@@ -13,7 +13,7 @@ SQLite, PostgreSQL, MySQL, Server Actions.
 <div align="center">
 
 [![Go Version](https://img.shields.io/badge/Go-1.26.6+-00ADD8?style=for-the-badge&logo=go&logoColor=white)](https://golang.org)
-[![Release](https://img.shields.io/badge/release-v1.0.0-6366F1?style=for-the-badge&logo=github)](https://github.com/misbakhul29/goks/releases)
+[![Tag](https://img.shields.io/github/v/tag/misbakhul29/goks?style=for-the-badge&logo=github&color=6366F1&label=tag)](https://github.com/misbakhul29/goks/tags)
 [![License](https://img.shields.io/badge/license-MIT-10B981?style=for-the-badge)](LICENSE)
 [![WASM](https://img.shields.io/badge/WebAssembly-Enabled-654FF0?style=for-the-badge&logo=webassembly&logoColor=white)](https://webassembly.org)
 [![Tailwind](https://img.shields.io/badge/Tailwind_CSS-v4-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
