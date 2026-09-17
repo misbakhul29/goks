@@ -4,11 +4,13 @@
 package ws
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -148,12 +150,49 @@ func (h *Hub) Broadcast(msg []byte) {
 
 func (h *Hub) remove(client *Client) {
 	h.mu.Lock()
+	_, existed := h.clients[client]
 	delete(h.clients, client)
 	h.mu.Unlock()
 	client.closeSend()
-	if h.onDisconnect != nil {
+	if existed && h.onDisconnect != nil {
 		h.onDisconnect(client)
 	}
+}
+
+// Close gracefully disconnects all connected clients.
+func (h *Hub) Close() {
+	_ = h.Shutdown(context.Background())
+}
+
+// Shutdown gracefully closes all client connections registered with the hub.
+func (h *Hub) Shutdown(ctx context.Context) error {
+	h.mu.Lock()
+	clients := make([]*Client, 0, len(h.clients))
+	for client := range h.clients {
+		clients = append(clients, client)
+		delete(h.clients, client)
+	}
+	h.mu.Unlock()
+
+	deadline := time.Now().Add(250 * time.Millisecond)
+	if d, ok := ctx.Deadline(); ok {
+		deadline = d
+	}
+
+	closeMsg := websocket.FormatCloseMessage(websocket.CloseGoingAway, "server shutting down")
+	for _, client := range clients {
+		if client.conn != nil {
+			_ = client.conn.WriteControl(websocket.CloseMessage, closeMsg, deadline)
+		}
+		client.closeSend()
+		if client.conn != nil {
+			_ = client.conn.Close()
+		}
+		if h.onDisconnect != nil {
+			h.onDisconnect(client)
+		}
+	}
+	return nil
 }
 
 // Send sends a message to a specific client.

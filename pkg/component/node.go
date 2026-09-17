@@ -228,16 +228,27 @@ func Expand(n *Node, appRerender func(), currentFiber *FiberNode) *Node {
 			childFiber.ChildIndex = 0
 		}
 
-		var prevFiber *FiberNode
+		var rendered *Node
 		if childFiber != nil {
-			prevFiber = setActiveFiber(childFiber)
-			defer func() {
-				setActiveFiber(prevFiber)
+			func() {
+				prevFiber := setActiveFiber(childFiber)
+				defer setActiveFiber(prevFiber)
+				rendered = n.Component.Render()
 			}()
+
+			childFiber.mu.Lock()
+			if childFiber.RenderCount > 0 && childFiber.HookIndex < len(childFiber.Hooks) {
+				expected := len(childFiber.Hooks)
+				actual := childFiber.HookIndex
+				childFiber.mu.Unlock()
+				panic(fmt.Sprintf("GoKS Hook Invariant Violation: Rendered fewer hooks than during the previous render pass (rendered %d, expected %d). Hooks must not be called conditionally or after early returns.", actual, expected))
+			}
+			childFiber.RenderCount++
+			childFiber.mu.Unlock()
+		} else {
+			rendered = n.Component.Render()
 		}
 
-		// Recursively render the component
-		rendered := n.Component.Render()
 		child := Expand(rendered, appRerender, childFiber)
 
 		if child != nil {
