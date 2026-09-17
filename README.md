@@ -186,6 +186,11 @@ func (p *Page) Render() *component.Node {
 }
 ```
 
+### GOX Syntax Features
+
+- **Local Components**: Tag names starting with a capital letter (such as `<Card />`, `<Header />`, or `<Button />`) in the same package are recognized automatically and compiled into Go component instantiations without needing a package namespace prefix (`ui.Card`).
+- **Boolean Props Shorthand**: Standalone attributes without explicit values (such as `<input required autofocus disabled />` or `<Button primary disabled />`) automatically compile to boolean `true` values (`disabled: true` or `.Attr("disabled", true)`).
+
 ### Example: Client Interactive Island & State (`app/components/counter.gox`)
 
 To mark a component as an interactive client island that hydrates WebAssembly, embed `component.ClientBase` or use event handlers:
@@ -529,7 +534,7 @@ func GET(c *router.Context) error {
 
 ## 🔄 Progressive Server Actions (`pkg/action`)
 
-Server Actions allow you to run backend Go functions directly from HTML forms with seamless progressive enhancement:
+Server Actions allow you to run backend Go functions directly from HTML forms with progressive enhancement:
 
 ```go
 package actions
@@ -543,30 +548,36 @@ import (
 func init() {
 	// Register a named Server Action
 	action.Register("createSubscriber", func(ctx *action.Context) (any, error) {
-		email := ctx.FormData.Get("email")
+		email := ctx.Get("email")
 		if email == "" {
 			return nil, fmt.Errorf("email is required")
 		}
 
-		// Direct database access on the server
-		// orm.Create(orm.DB, &models.Subscriber{Email: email})
+		// Support file uploads directly via ctx.File("avatar")
+		// file, header, err := ctx.File("avatar")
+
+		// Direct database access on the server with context
+		// err := orm.CreateContext(ctx.Request.Context(), orm.DB, &models.Subscriber{Email: email})
 
 		return map[string]string{"message": "Subscribed successfully!"}, nil
 	})
 }
 ```
 
-In your `.gox` view:
+In your `.gox` view using HTML or the `action.Form` helper:
 ```html
 <form action={action.URL("createSubscriber")} method="POST" class="space-y-4">
 	<input type="email" name="email" placeholder="name@example.com" required class="..." />
 	<button type="submit" class="...">Subscribe</button>
 </form>
 ```
+Or generated via programmatic Go helper `action.Form("createSubscriber", props, children...)`.
 
 - **In the Browser (WASM)**: Automatically intercepts `<form>` submits to `/__goks_action`, performs background `fetch()`, and updates the UI without full page refreshes.
-- **Zero-JS Fallback**: If JavaScript/WASM is unavailable, submits as a standard HTML form POST and redirects back with HTTP 303.
-- **CSRF Protection**: Automatically validates request origins against server host headers.
+- **Zero-JS Fallback**: If JavaScript/WASM is unavailable, submits as a standard HTML form POST and safely redirects back to the same-origin referrer with HTTP 303.
+- **CSRF & Origin Security**: Automatically validates request origins against server host headers and blocks `Sec-Fetch-Site: cross-site`.
+- **HMAC-SHA256 Token Protection**: Enable cryptographic token validation using `action.SetSecret([]byte("..."))` for signed `_csrf` tokens.
+- **Multipart Form & File Uploads**: Transparently parses `multipart/form-data` with `ctx.Get("field")`, `ctx.GetAll("tags")`, and `ctx.File("document")`.
 
 ---
 
@@ -586,7 +597,7 @@ type InteractiveWidget struct {
 
 ---
 
-## 🗄️ Built-in ORM with SQLite
+## 🗄️ Built-in ORM with SQLite, PostgreSQL, and MySQL
 
 GoKS includes a database ORM with zero external configuration required:
 
@@ -594,6 +605,7 @@ GoKS includes a database ORM with zero external configuration required:
 package main
 
 import (
+	"context"
 	"log"
 	"github.com/misbakhul29/goks/pkg/orm"
 )
@@ -603,6 +615,18 @@ type Post struct {
 	Title   string `db:"title"`
 	Content string `db:"content"`
 	Author  string `db:"author"`
+	HookLog string `db:"-"` // db:"-" ignores struct field from database columns
+}
+
+// Optional Model Lifecycle Hooks
+func (p *Post) BeforeCreate(ctx context.Context) error {
+	log.Printf("Creating post: %s", p.Title)
+	return nil
+}
+
+// Optional custom table name
+func (p *Post) TableName() string {
+	return "posts"
 }
 
 func main() {
@@ -613,20 +637,28 @@ func main() {
 	}
 	defer db.Close()
 
-	// 2. Insert record
+	// 2. Insert record with context and lifecycle hooks
 	newPost := &Post{Title: "Hello GoKS", Content: "Building fullstack apps in Go", Author: "Alex"}
 	_ = orm.Create(db, newPost)
 
 	// 3. Query records with fluent API
-	posts, err := orm.Query[Post]().
-		Where("author", "=", "Alex").
+	posts, err := orm.Query[Post](db).
+		Where("author = ?", "Alex").
 		OrderBy("created_at DESC").
 		Limit(10).
-		Find(db)
+		Find()
+
+	// 4. Quick primary key lookup
+	post, err := orm.FindByID[Post](db, 1)
 }
 ```
 
-Supports **SQLite**, **PostgreSQL**, and **MySQL**.
+Key features:
+- **Model Lifecycle Hooks**: `BeforeCreate`, `AfterCreate`, `BeforeUpdate`, `AfterUpdate`, `BeforeDelete`, `AfterDelete`, `AfterFind` with context or plain signatures.
+- **Context-Aware CRUD**: `CreateContext`, `UpdateContext`, `DeleteContext`, `HardDeleteContext`, `RestoreContext`, `FindByIDContext`, `TransactionContext`.
+- **Custom Table Names**: Models implementing `TableNamer` (`TableName() string`) specify custom database tables.
+- **Standalone Models**: Supports models with direct `ID uint` and `DeletedAt *time.Time` as well as embedded `orm.Model`.
+- **Database Support**: SQLite, PostgreSQL, and MySQL.
 
 ---
 
