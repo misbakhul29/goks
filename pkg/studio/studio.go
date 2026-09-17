@@ -17,10 +17,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/joho/godotenv"
 	"github.com/misbakhul29/goks/internal/version"
 	"github.com/misbakhul29/goks/pkg/action"
+	"github.com/misbakhul29/goks/pkg/orm"
 	"github.com/misbakhul29/goks/pkg/router"
 	"github.com/misbakhul29/goks/pkg/rpc"
+	_ "modernc.org/sqlite"
 )
 
 var validTableName = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
@@ -32,7 +35,8 @@ type Config struct {
 	AppDir  string
 	Router  *router.Router
 	DevMode bool
-	DBPath  string // optional custom db path; defaults to app.db in AppDir
+	DBPath  string        // optional custom db path; defaults to app.db in AppDir or database/app.db
+	DB      *orm.Database // optional live database instance (supports SQLite, Postgres, MySQL)
 }
 
 // Studio provides the DevTools HTTP handler.
@@ -45,9 +49,6 @@ type Studio struct {
 func New(cfg Config) *Studio {
 	if cfg.AppDir == "" {
 		cfg.AppDir = "."
-	}
-	if cfg.DBPath == "" {
-		cfg.DBPath = filepath.Join(cfg.AppDir, "app.db")
 	}
 	return &Studio{cfg: cfg}
 }
@@ -188,11 +189,115 @@ func (s *Studio) handleRPC(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(res)
 }
 
-func (s *Studio) getSQLiteTables() []string {
-	if _, err := os.Stat(s.cfg.DBPath); os.IsNotExist(err) {
-		return nil
+func (s *Studio) activeDB() *orm.Database {
+	if s.cfg.DB != nil && s.cfg.DB.Raw() != nil {
+		return s.cfg.DB
 	}
-	db, err := sql.Open("sqlite3", s.cfg.DBPath)
+	if orm.DB != nil && orm.DB.Raw() != nil {
+		return orm.DB
+	}
+	return nil
+}
+
+func (s *Studio) resolveDBPath() string {
+	if s.cfg.DBPath != "" {
+		if _, err := os.Stat(s.cfg.DBPath); err == nil {
+			return s.cfg.DBPath
+		}
+	}
+
+	appDir := s.cfg.AppDir
+	if appDir == "" {
+		appDir = "."
+	}
+
+	_ = godotenv.Load(filepath.Join(appDir, ".env"))
+	if dbURL := os.Getenv("DATABASE_URL"); dbURL != "" {
+		if strings.HasPrefix(dbURL, "sqlite://") {
+			candidate := filepath.Join(appDir, strings.TrimPrefix(dbURL, "sqlite://"))
+			if _, err := os.Stat(candidate); err == nil {
+				return candidate
+			}
+		}
+	}
+
+	candidateRoot := filepath.Join(appDir, "app.db")
+	if _, err := os.Stat(candidateRoot); err == nil {
+		return candidateRoot
+	}
+
+	candidateDB := filepath.Join(appDir, "database", "app.db")
+	if _, err := os.Stat(candidateDB); err == nil {
+		return candidateDB
+	}
+
+	if s.cfg.DBPath != "" {
+		return s.cfg.DBPath
+	}
+	return candidateRoot
+}
+
+func openSQLite(dbPath string) (*sql.DB, error) {
+	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+		return nil, os.ErrNotExist
+	}
+	db, err := sql.Open("sqlite", dbPath)
+	if err == nil {
+		if pingErr := db.Ping(); pingErr == nil {
+			return db, nil
+		}
+		_ = db.Close()
+	}
+	return sql.Open("sqlite3", dbPath)
+}
+
+func (s *Studio) resolveMigrationsDir() string {
+	appDir := s.cfg.AppDir
+	if appDir == "" {
+		appDir = "."
+	}
+	dbMig := filepath.Join(appDir, "database", "migrations")
+	if info, err := os.Stat(dbMig); err == nil && info.IsDir() {
+		return dbMig
+	}
+	shortDbMig := filepath.Join(appDir, "db", "migrations")
+	if info, err := os.Stat(shortDbMig); err == nil && info.IsDir() {
+		return shortDbMig
+	}
+	return filepath.Join(appDir, "migrations")
+}
+
+func (s *Studio) getDatabaseTables() []string {
+	if adb := s.activeDB(); adb != nil {
+		dialect := "sqlite"
+		if adb.Dialect() != nil {
+			dialect = adb.Dialect().Name()
+		}
+		var q string
+		switch dialect {
+		case "postgres":
+			q = "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name"
+		case "mysql":
+			q = "SHOW TABLES"
+		default:
+			q = "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+		}
+		rows, err := adb.Raw().Query(q)
+		if err == nil {
+			defer rows.Close()
+			var tables []string
+			for rows.Next() {
+				var name string
+				if err := rows.Scan(&name); err == nil {
+					tables = append(tables, name)
+				}
+			}
+			return tables
+		}
+	}
+
+	dbPath := s.resolveDBPath()
+	db, err := openSQLite(dbPath)
 	if err != nil {
 		return nil
 	}
@@ -214,8 +319,12 @@ func (s *Studio) getSQLiteTables() []string {
 	return tables
 }
 
+func (s *Studio) getSQLiteTables() []string {
+	return s.getDatabaseTables()
+}
+
 func (s *Studio) handleDBTables(w http.ResponseWriter, r *http.Request) {
-	tables := s.getSQLiteTables()
+	tables := s.getDatabaseTables()
 	if tables == nil {
 		tables = []string{}
 	}
@@ -245,29 +354,31 @@ func (s *Studio) handleDBTableRows(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if _, err := os.Stat(s.cfg.DBPath); os.IsNotExist(err) {
-		http.Error(w, "database file not found", http.StatusNotFound)
-		return
+	var rawDB *sql.DB
+	if adb := s.activeDB(); adb != nil {
+		rawDB = adb.Raw()
+	} else {
+		dbPath := s.resolveDBPath()
+		var err error
+		rawDB, err = openSQLite(dbPath)
+		if err != nil {
+			http.Error(w, "database file not found or failed to open: "+err.Error(), http.StatusNotFound)
+			return
+		}
+		defer rawDB.Close()
 	}
-
-	db, err := sql.Open("sqlite3", s.cfg.DBPath)
-	if err != nil {
-		http.Error(w, "failed to open database: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer db.Close()
 
 	// 1. Total row count
 	var total int
 	countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM "%s"`, tableName)
-	if err := db.QueryRow(countQuery).Scan(&total); err != nil {
+	if err := rawDB.QueryRow(countQuery).Scan(&total); err != nil {
 		http.Error(w, "failed to query table count: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	// 2. Fetch rows (Read-only, parameterized LIMIT/OFFSET)
 	selectQuery := fmt.Sprintf(`SELECT * FROM "%s" LIMIT %d OFFSET %d`, tableName, limit, offset)
-	rows, err := db.Query(selectQuery)
+	rows, err := rawDB.Query(selectQuery)
 	if err != nil {
 		http.Error(w, "failed to query rows: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -318,7 +429,7 @@ func (s *Studio) handleDBTableRows(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Studio) handleMigrations(w http.ResponseWriter, r *http.Request) {
-	migDir := filepath.Join(s.cfg.AppDir, "migrations")
+	migDir := s.resolveMigrationsDir()
 	type MigrationItem struct {
 		Name    string `json:"name"`
 		Applied bool   `json:"applied"`
@@ -337,23 +448,41 @@ func (s *Studio) handleMigrations(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// If database has tracking table goks_migrations, correlate applied status
-	if _, err := os.Stat(s.cfg.DBPath); err == nil {
-		if db, err := sql.Open("sqlite3", s.cfg.DBPath); err == nil {
-			defer db.Close()
-			rows, err := db.Query("SELECT migration, batch FROM goks_migrations")
-			if err == nil {
-				defer rows.Close()
-				appliedMap := make(map[string]int)
-				for rows.Next() {
-					var name string
-					var batch int
-					if err := rows.Scan(&name, &batch); err == nil {
-						appliedMap[name] = batch
-					}
+	// Correlate applied migrations from goks_migrations tracking table
+	var rawDB *sql.DB
+	if adb := s.activeDB(); adb != nil {
+		rawDB = adb.Raw()
+	} else {
+		dbPath := s.resolveDBPath()
+		if db, err := openSQLite(dbPath); err == nil {
+			rawDB = db
+			defer rawDB.Close()
+		}
+	}
+
+	if rawDB != nil {
+		// Table schema: (id, version, name, batch, applied_at)
+		rows, err := rawDB.Query("SELECT version, name, batch FROM goks_migrations")
+		if err == nil {
+			defer rows.Close()
+			appliedMap := make(map[string]int)
+			for rows.Next() {
+				var v, n string
+				var b int
+				if err := rows.Scan(&v, &n, &b); err == nil {
+					appliedMap[v] = b
+					appliedMap[n] = b
+					appliedMap[fmt.Sprintf("%s_%s", v, n)] = b
+					appliedMap[fmt.Sprintf("%s_%s.sql", v, n)] = b
 				}
-				for i := range items {
-					if b, ok := appliedMap[items[i].Name]; ok {
+			}
+			for i := range items {
+				if b, ok := appliedMap[items[i].Name]; ok {
+					items[i].Applied = true
+					items[i].Batch = b
+				} else {
+					base := strings.TrimSuffix(items[i].Name, ".sql")
+					if b, ok := appliedMap[base]; ok {
 						items[i].Applied = true
 						items[i].Batch = b
 					}
