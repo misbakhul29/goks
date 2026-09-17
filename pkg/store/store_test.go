@@ -101,3 +101,49 @@ func TestStore_ConcurrentAccess(t *testing.T) {
 
 	wg.Wait()
 }
+
+func TestStore_Reentrancy(t *testing.T) {
+	s := store.New(0)
+	var intermediateVal int
+
+	// Subscriber triggers another update inside the notification callback.
+	// Since Store releases its mutex before calling listeners, this must not deadlock.
+	var unsub func()
+	unsub = s.Subscribe(func(v int) {
+		if v == 1 {
+			s.Set(2)
+		} else if v == 2 {
+			intermediateVal = v
+		}
+	})
+	defer unsub()
+
+	s.Set(1)
+
+	if s.Get() != 2 {
+		t.Fatalf("expected state 2 after reentrant update, got %d", s.Get())
+	}
+	if intermediateVal != 2 {
+		t.Fatalf("expected intermediateVal 2, got %d", intermediateVal)
+	}
+}
+
+func TestStore_UnsubscribeWithinCallback(t *testing.T) {
+	s := store.New(0)
+	callCount := 0
+
+	var unsub func()
+	unsub = s.Subscribe(func(v int) {
+		callCount++
+		// Unsubscribe self during notification
+		unsub()
+	})
+
+	s.Set(1)
+	s.Set(2)
+	s.Set(3)
+
+	if callCount != 1 {
+		t.Fatalf("expected subscriber to be called exactly once before unsubscribing, got %d", callCount)
+	}
+}

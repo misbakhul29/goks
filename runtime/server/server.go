@@ -32,6 +32,7 @@ import (
 	"github.com/misbakhul29/goks/pkg/router"
 	"github.com/misbakhul29/goks/pkg/rpc"
 	"github.com/misbakhul29/goks/pkg/studio"
+	"github.com/misbakhul29/goks/pkg/ws"
 )
 
 var ssrMutex sync.Mutex
@@ -53,6 +54,7 @@ type Config struct {
 	Standalone  bool                    // if true, serve assets from embedded FS (standalone build)
 	Root        component.Renderable    // Root component for Server-Side Rendering (SSR)
 	Middlewares []router.MiddlewareFunc // User-defined global middlewares
+	WSHub       *ws.Hub                 // Optional WebSocket hub whose lifecycle is managed with the server
 
 	// Standalone mode: embedded filesystems (set by generated server_main.go)
 	EmbeddedAssets fs.ReadFileFS // embeds app.wasm, app.css, wasm_exec.js
@@ -68,6 +70,7 @@ type DevServer struct {
 	routesOnce sync.Once
 	httpServer *http.Server
 	serverMu   sync.Mutex
+	wsHub      *ws.Hub
 }
 
 // Server is an alias to DevServer representing the GoKS HTTP runtime server.
@@ -91,7 +94,8 @@ func NewDev(cfg Config) *DevServer {
 	}
 
 	r := router.New()
-	r.Use(router.Logger(), router.Recover(), router.RequestID())
+	// Standard middleware order: RequestID injects context/headers first, then Logger, then Recover wraps downstream errors
+	r.Use(router.RequestID(), router.Logger(), router.Recover())
 	if len(cfg.Middlewares) > 0 {
 		r.Use(cfg.Middlewares...)
 	}
@@ -100,7 +104,22 @@ func NewDev(cfg Config) *DevServer {
 		cfg:    cfg,
 		router: r,
 		lr:     livereload.New(),
+		wsHub:  cfg.WSHub,
 	}
+}
+
+// SetWSHub registers or updates the WebSocket hub associated with this server.
+func (s *DevServer) SetWSHub(hub *ws.Hub) {
+	s.serverMu.Lock()
+	defer s.serverMu.Unlock()
+	s.wsHub = hub
+}
+
+// WSHub returns the registered WebSocket hub if any.
+func (s *DevServer) WSHub() *ws.Hub {
+	s.serverMu.Lock()
+	defer s.serverMu.Unlock()
+	return s.wsHub
 }
 
 // Router returns the underlying HTTP router instance.
@@ -108,15 +127,27 @@ func (s *DevServer) Router() *router.Router {
 	return s.router
 }
 
-// Shutdown gracefully stops the HTTP server.
+// Shutdown gracefully stops the HTTP server and any associated WebSocket hubs.
 func (s *DevServer) Shutdown(ctx context.Context) error {
 	s.serverMu.Lock()
 	srv := s.httpServer
+	hub := s.wsHub
 	s.serverMu.Unlock()
-	if srv == nil {
-		return nil
+
+	var firstErr error
+	if srv != nil {
+		if err := srv.Shutdown(ctx); err != nil {
+			firstErr = err
+		}
 	}
-	return srv.Shutdown(ctx)
+
+	if hub != nil {
+		if err := hub.Shutdown(ctx); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+
+	return firstErr
 }
 
 // Start launches the dev server with file watching and live reload.

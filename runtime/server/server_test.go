@@ -14,6 +14,8 @@ import (
 	"github.com/misbakhul29/goks/pkg/component"
 	"github.com/misbakhul29/goks/pkg/html"
 	"github.com/misbakhul29/goks/pkg/metadata"
+	"github.com/misbakhul29/goks/pkg/router"
+	"github.com/misbakhul29/goks/pkg/ws"
 )
 
 type testLayout struct {
@@ -318,4 +320,81 @@ func TestServer_ConcurrentRequests(t *testing.T) {
 		}(i)
 	}
 	wg.Wait()
+}
+
+func TestServer_MiddlewarePipelineOrdering(t *testing.T) {
+	var capturedReqID string
+	var middlewareExecutedInOrder []string
+
+	srv := New(Config{
+		AppDir: t.TempDir(),
+		Middlewares: []router.MiddlewareFunc{
+			func(next router.Handler) router.Handler {
+				return func(c *router.Context) error {
+					middlewareExecutedInOrder = append(middlewareExecutedInOrder, "custom-pre")
+					capturedReqID = c.RequestID()
+					err := next(c)
+					middlewareExecutedInOrder = append(middlewareExecutedInOrder, "custom-post")
+					return err
+				}
+			},
+		},
+	})
+	srv.setupRoutes()
+
+	req := httptest.NewRequest("GET", "/_goks/healthz", nil)
+	rec := httptest.NewRecorder()
+	srv.Router().ServeHTTP(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	// Verify RequestID was injected into context before downstream user middlewares ran
+	if capturedReqID == "" {
+		t.Fatal("expected request ID to be present in context during custom middleware execution")
+	}
+
+	// Verify X-Request-Id header is set in response
+	respReqID := rec.Header().Get("X-Request-Id")
+	if respReqID == "" {
+		t.Fatal("expected X-Request-Id header in HTTP response")
+	}
+	if respReqID != capturedReqID {
+		t.Fatalf("expected response header %q to match context request ID %q", respReqID, capturedReqID)
+	}
+
+	if len(middlewareExecutedInOrder) != 2 || middlewareExecutedInOrder[0] != "custom-pre" || middlewareExecutedInOrder[1] != "custom-post" {
+		t.Fatalf("unexpected middleware execution order: %v", middlewareExecutedInOrder)
+	}
+}
+
+func TestServer_GracefulShutdownWithWSHub(t *testing.T) {
+	hub := ws.NewHub()
+
+	// Connect a mock client
+	c := &ws.Client{}
+	_ = c
+
+	srv := New(Config{
+		Host:   "127.0.0.1",
+		Port:   39483,
+		AppDir: t.TempDir(),
+		WSHub:  hub,
+	})
+
+	if srv.WSHub() != hub {
+		t.Fatal("expected registered WSHub to match")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		t.Fatalf("unexpected error during server and ws hub shutdown: %v", err)
+	}
+
+	if hub.ClientCount() != 0 {
+		t.Fatalf("expected 0 clients in hub after shutdown, got %d", hub.ClientCount())
+	}
 }

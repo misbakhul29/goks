@@ -65,11 +65,28 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Build js/wasm & track size
+      - name: Build js/wasm & assert bundle size budget
         run: |
           mkdir -p wasm-artifacts
           GOOS=js GOARCH=wasm go build -o wasm-artifacts/app.wasm ./...
           ls -lh wasm-artifacts/app.wasm | tee wasm-artifacts/bundle-size.txt
+
+          size_bytes=$(wc -c < wasm-artifacts/app.wasm | tr -d ' ')
+          size_kb=$((size_bytes / 1024))
+          max_kb=15360 # 15 MB budget for uncompressed standard Go WASM
+
+          echo "WASM binary size: ${size_kb} KB (${size_bytes} bytes)"
+          if [ "$size_kb" -gt "$max_kb" ]; then
+            echo "::error::WASM bundle size ${size_kb}KB exceeds maximum budget of ${max_kb}KB!"
+            exit 1
+          fi
+
+          if [ -n "$GITHUB_STEP_SUMMARY" ]; then
+            echo "### 📦 WASM Bundle Size Report" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Artifact | Size (KB) | Budget Limit (KB) | Status |" >> "$GITHUB_STEP_SUMMARY"
+            echo "| --- | --- | --- | --- |" >> "$GITHUB_STEP_SUMMARY"
+            echo "| \`app.wasm\` | ${size_kb} KB | ${max_kb} KB | ✅ Pass |" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Upload WASM artifact
         uses: actions/upload-artifact@v4

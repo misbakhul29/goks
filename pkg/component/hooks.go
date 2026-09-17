@@ -18,6 +18,7 @@ type FiberNode struct {
 	ChildIndex  int
 	Children    []*FiberNode
 	AppRerender func()
+	RenderCount int
 }
 
 func (f *FiberNode) getOrCreateChild(index int) *FiberNode {
@@ -63,6 +64,11 @@ func UseState[T any](initial T) (T, func(T)) {
 
 	idx := f.HookIndex
 	f.HookIndex++
+
+	// Verify hook invariant: cannot render more hooks than during previous render
+	if f.RenderCount > 0 && idx >= len(f.Hooks) {
+		panic(fmt.Sprintf("GoKS Hook Invariant Violation: Rendered more hooks than during the previous render pass (hook %d, expected at most %d). Hooks must not be called conditionally or inside loops.", idx+1, len(f.Hooks)))
+	}
 
 	// Initialize state if it's the first render for this hook
 	if idx >= len(f.Hooks) {

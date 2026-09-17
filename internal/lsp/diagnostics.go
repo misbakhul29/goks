@@ -25,16 +25,28 @@ func ValidateDocument(uri, content string) []Diagnostic {
 
 	// 2. If no fatal JSX errors, transpile to Go and check with Go's standard AST parser
 	if len(jsxDiags) == 0 {
-		transpiled, err := compiler.Transpile(content)
+		transpiled, err := compiler.TranspileWithSource(content, uri)
 		if err != nil {
+			line := 0
+			col := 0
+			msg := err.Error()
+			if ce, ok := err.(*compiler.CompileError); ok {
+				if ce.Line > 0 {
+					line = ce.Line - 1
+				}
+				if ce.Column > 0 {
+					col = ce.Column - 1
+				}
+				msg = ce.Message
+			}
 			diagnostics = append(diagnostics, Diagnostic{
 				Range: Range{
-					Start: Position{Line: 0, Character: 0},
-					End:   Position{Line: 0, Character: 1},
+					Start: Position{Line: line, Character: col},
+					End:   Position{Line: line, Character: col + 1},
 				},
 				Severity: SeverityError,
 				Source:   "gox-compiler",
-				Message:  fmt.Sprintf("Transpile error: %v", err),
+				Message:  fmt.Sprintf("Transpile error: %s", msg),
 			})
 		} else {
 			goDiags := validateGoSyntax(transpiled, lines)
