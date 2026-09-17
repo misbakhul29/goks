@@ -31,15 +31,15 @@ update it in the same change that restructures code.
 
 | Package | Responsibility |
 | --- | --- |
-| `pkg/router` | File-system routing (`app/page.gox`, `app/layout.gox`) + programmatic routes. |
-| `pkg/action` | Server actions: dual-mode (WASM `fetch()` + no-JS HTML form fallback), CSRF. |
+| `pkg/router` | File-system routing (`app/page.gox`, `app/layout.gox`), nested route groups, thread-safe programmatic routes. |
+| `pkg/action` | Server actions: dual-mode (WASM `fetch()` + no-JS HTML form fallback), `action.Form` helper, multipart upload, CSRF protection. |
 | `pkg/component` | Component model, hooks (`UseState`, ...), reconciliation, SSR, islands, Suspense, and streaming. |
-| `internal/compiler` | GOX syntax -> Go code generation in an isolated workspace. |
+| `internal/compiler` | GOX syntax -> Go code generation with local components and boolean shorthand support. |
 | `internal/generator` | File-system route and entrypoint generation. |
-| `pkg/orm` | Query builder, migrations, soft delete, timestamps, SQLite support. |
+| `pkg/orm` | Query builder, lifecycle hooks, context-aware CRUD, migrations, soft delete, timestamps, multi-dialect support. |
 | `pkg/auth`, `pkg/auth/oauth` | JWT/session authentication primitives and OAuth2 providers. |
 | `pkg/rbac` | Role-based access control middleware. |
-| `pkg/ws` | WebSocket hub, typed event routing, rooms. |
+| `pkg/ws` | WebSocket hub, typed event routing, rooms, frame size limits, keep-alive heartbeat. |
 | `pkg/store` | Reactive global state store for client WASM. |
 | `pkg/rpc` | RPC plumbing bridging server actions and the WASM client. |
 | `pkg/cache`, `pkg/env`, `pkg/font`, `pkg/html`, `pkg/image`, `pkg/metadata` | Supporting infrastructure. |

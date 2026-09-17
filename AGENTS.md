@@ -53,7 +53,7 @@ one platform, not to keep bolting on more surface area.
 - `internal/lsp/` — language server support for `.gox`.
 - `internal/version/` — single source of the framework version for tooling and runtime diagnostics.
 - `internal/watcher/` — filesystem watcher for `goks dev`.
-- `pkg/action/` — progressive server actions (fetch + no-JS form fallback, CSRF).
+- `pkg/action/` — progressive server actions (fetch + no-JS form fallback, form helper, CSRF).
 - `pkg/auth/` — JWT/session auth primitives.
 - `pkg/auth/oauth/` — OAuth2 social login providers with PKCE.
 - `pkg/cache/` — caching primitives.
@@ -64,7 +64,7 @@ one platform, not to keep bolting on more surface area.
 - `pkg/image/` — image optimization and responsive image components.
 - `pkg/metadata/` — page metadata (title/SEO tags).
 - `pkg/studio/` — embedded development dashboard and runtime telemetry.
-- `pkg/orm/` — query builder, migrations, soft delete, timestamps.
+- `pkg/orm/` — query builder, lifecycle hooks, context-aware CRUD, migrations, soft delete, timestamps.
 - `pkg/rbac/` — role-based access control middleware.
 - `pkg/router/` — file-system + programmatic routing.
 - `pkg/rpc/` — RPC-style call plumbing (used by server actions/WASM bridge).
