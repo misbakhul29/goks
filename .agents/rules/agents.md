@@ -4,17 +4,23 @@ trigger: always_on
 
 # Project Rules & Customizations
 
-## Git Commit & Versioning Conventions
+## Git Commit & Release Conventions
 
-Every time a new feature is implemented or a major bug is fixed in this repository, follow these rules:
+Follow these rules for development, commits, and releases:
 
-1. **Semantic Versioning & Git Tags**:
-   - Always update Semantic Versioning (`vX.Y.Z`):
-     - `MINOR` bump (`v1.1.0` -> `v1.2.0`) for new feature implementations.
-     - `PATCH` bump (`v1.1.0` -> `v1.1.1`) for major bug fixes.
-     - `MAJOR` bump (`v1.0.0` -> `v2.0.0`) for breaking changes.
-   - Always create an annotated Git tag matching the version:
-     `git tag -a vX.Y.Z -m "vX.Y.Z: <Summary>"`
+1. **Commit Discipline (Routine Tasks)**:
+   - Use clean, conventional scoped commit messages: `feat(...)`, `fix(...)`, `refactor(...)`, `perf(...)`, `test(...)`, `docs(...)`.
+   - Proactively assist the user with `git add` and `git commit` for completed tasks.
+   - **Do NOT automatically bump versions or create Git tags on every task/commit.** Commits are the unit of daily work, while tags are milestone releases.
 
-2. **Workflow Rule**:
-   - Proactively assist the user with `git add`, `git commit`, and `git tag` upon finishing feature implementations or major bug fixes.
+2. **Milestone Release & Git Tags (On-Demand Only)**:
+   - Only create Git tags when the user **explicitly asks** to release a new version or cut a milestone.
+   - Batch multiple bug fixes and enhancements into a single release rather than releasing a tag per commit.
+   - When a release is requested:
+     - Update Semantic Versioning in `internal/version/version.go`:
+       - `PATCH` bump (`v1.4.0` -> `v1.4.1`): Bundled bug fixes and maintenance improvements.
+       - `MINOR` bump (`v1.4.0` -> `v1.5.0`): New features and backward-compatible enhancements.
+       - `MAJOR` bump (`v1.0.0` -> `v2.0.0`): Breaking changes to public API (requires ADR).
+     - Create an annotated Git tag matching the milestone:
+       - Framework: `git tag -a vX.Y.Z -m "vX.Y.Z: <Summary>"`
+       - VS Code Extension: `git tag -a editors/vscode/vX.Y.Z -m "editors/vscode/vX.Y.Z: <Summary>"`

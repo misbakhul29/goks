@@ -16,6 +16,6 @@ trigger: always_on
   - `docs(cli): document build pipeline`
 - Do not commit directly to `main` for non-trivial changes — open a branch,
   self-review the diff against the quality gate, then merge.
-- Semantic-version tags (`vX.Y.Z`) may be created for releases: MINOR for new
-  features, PATCH for bug fixes, MAJOR for breaking changes — consistent
-  with the existing project convention.
+- Semantic-version tags (`vX.Y.Z`) are reserved for milestone releases (not per-commit):
+  MINOR for new features, PATCH for batched bug fixes, MAJOR for breaking changes.
+  Only create tags when explicitly requested or cutting a release.
