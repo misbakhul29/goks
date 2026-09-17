@@ -527,3 +527,72 @@ func TestRouter_ConcurrentAccess(t *testing.T) {
 
 	wg.Wait()
 }
+
+func TestRouter_ContextFlashAndIntended(t *testing.T) {
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/login", nil)
+	ctx := router.NewTestContext(rec, req)
+
+	// Test Flash
+	ctx.Flash("alert", "Welcome back!")
+	var flashCookie *http.Cookie
+	for _, c := range (&http.Response{Header: rec.Header()}).Cookies() {
+		if c.Name == "goks_flash_alert" {
+			flashCookie = c
+			break
+		}
+	}
+	if flashCookie == nil {
+		t.Fatal("expected flash cookie to be set")
+	}
+
+	reqWithCookie := httptest.NewRequest("GET", "/dashboard", nil)
+	reqWithCookie.AddCookie(flashCookie)
+	rec2 := httptest.NewRecorder()
+	ctx2 := router.NewTestContext(rec2, reqWithCookie)
+
+	msg := ctx2.GetFlash("alert")
+	if msg != "Welcome back!" {
+		t.Fatalf("expected 'Welcome back!', got %q", msg)
+	}
+
+	// Test RedirectIntended fallback
+	rec3 := httptest.NewRecorder()
+	req3 := httptest.NewRequest("GET", "/login", nil)
+	ctx3 := router.NewTestContext(rec3, req3)
+	if err := ctx3.RedirectIntended("/home"); err != nil {
+		t.Fatalf("unexpected redirect error: %v", err)
+	}
+	if loc := rec3.Header().Get("Location"); loc != "/home" {
+		t.Fatalf("expected /home, got %q", loc)
+	}
+}
+
+func TestRouter_ContextStoreAndAuthUser(t *testing.T) {
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/profile", nil)
+	ctx := router.NewTestContext(rec, req)
+
+	ctx.Set("custom_key", 12345)
+	if val := ctx.Get("custom_key"); val != 12345 {
+		t.Fatalf("expected 12345, got %v", val)
+	}
+
+	// Test registered resolver
+	router.RegisterAuthUserResolver(func(r *http.Request) any {
+		if r.Header.Get("X-Mock-User") != "" {
+			return map[string]string{"name": "Alice"}
+		}
+		return nil
+	})
+
+	if ctx.AuthUser() != nil {
+		t.Fatal("expected nil user without header")
+	}
+
+	req.Header.Set("X-Mock-User", "true")
+	u := ctx.AuthUser()
+	if u == nil {
+		t.Fatal("expected non-nil user with header")
+	}
+}

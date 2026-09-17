@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/misbakhul29/goks/pkg/action"
+	"github.com/misbakhul29/goks/pkg/auth"
 )
 
 func init() {
@@ -242,5 +243,94 @@ func TestAction_SafeRedirectTarget(t *testing.T) {
 	}
 	if loc := recBad.Header().Get("Location"); loc != "/" {
 		t.Fatalf("expected open redirect to be sanitized to /, got %q", loc)
+	}
+}
+
+func TestAction_AuthAndSessionHelpers(t *testing.T) {
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/__goks_action", nil)
+
+	ctx := &action.Context{
+		Request:  req,
+		Response: rec,
+	}
+
+	if ctx.IsAuthenticated() {
+		t.Fatal("expected unauthenticated initially")
+	}
+
+	testUser := &auth.User{
+		ID:    42,
+		Email: "action_user@example.com",
+		Roles: []string{"editor"},
+	}
+
+	sess, err := ctx.Login(testUser)
+	if err != nil {
+		t.Fatalf("Login failed: %v", err)
+	}
+	if sess == nil || sess.Token == "" {
+		t.Fatal("expected non-empty session token")
+	}
+
+	// Verify cookies set
+	cookies := rec.Result().Cookies()
+	var authCookie *http.Cookie
+	for _, c := range cookies {
+		if c.Name == "goks_session" {
+			authCookie = c
+			break
+		}
+	}
+	if authCookie == nil {
+		t.Fatal("expected goks_session cookie to be set")
+	}
+
+	// Attach cookie to request to test User(), HasRole(), Can()
+	req.AddCookie(authCookie)
+	if !ctx.IsAuthenticated() {
+		t.Fatal("expected authenticated after cookie attached")
+	}
+	if u := ctx.User(); u == nil || u.Email != "action_user@example.com" {
+		t.Fatalf("expected user action_user@example.com, got %v", u)
+	}
+
+	if !ctx.HasRole("editor") {
+		t.Fatal("expected HasRole('editor') to be true")
+	}
+	if ctx.HasRole("admin") {
+		t.Fatal("expected HasRole('admin') to be false")
+	}
+
+	// Flash test
+	ctx.Flash("notice", "Account activated")
+	var flashCookie *http.Cookie
+	for _, c := range (&http.Response{Header: rec.Header()}).Cookies() {
+		if c.Name == "goks_flash_notice" {
+			flashCookie = c
+			break
+		}
+	}
+	if flashCookie == nil {
+		t.Fatal("expected flash cookie to be set")
+	}
+
+	// Read flash
+	req.AddCookie(flashCookie)
+	if val := ctx.GetFlash("notice"); val != "Account activated" {
+		t.Fatalf("expected 'Account activated', got %q", val)
+	}
+
+	// Logout test
+	ctx.Logout()
+	var loggedOutCookie *http.Cookie
+	for _, c := range (&http.Response{Header: rec.Header()}).Cookies() {
+		if c.Name == "goks_session" && c.MaxAge == -1 {
+			loggedOutCookie = c
+			break
+		}
+	}
+	if loggedOutCookie == nil {
+		t.Fatal("expected logout to clear session cookie with MaxAge=-1")
 	}
 }

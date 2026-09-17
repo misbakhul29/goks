@@ -17,7 +17,9 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/misbakhul29/goks/pkg/auth"
 	"github.com/misbakhul29/goks/pkg/component"
+	"github.com/misbakhul29/goks/pkg/rbac"
 )
 
 // Action is a server-side action handler.
@@ -82,6 +84,87 @@ func (c *Context) File(key string) (multipart.File, *multipart.FileHeader, error
 		return nil, nil, http.ErrMissingFile
 	}
 	return c.Request.FormFile(key)
+}
+
+// User returns the authenticated user from the request, or nil if unauthenticated.
+func (c *Context) User() *auth.User {
+	if c.Request == nil {
+		return nil
+	}
+	return auth.CurrentUser(c.Request)
+}
+
+// IsAuthenticated reports whether the current request has an active authenticated session.
+func (c *Context) IsAuthenticated() bool {
+	return c.User() != nil
+}
+
+// Login creates a new session for the given user and sets the auth cookie.
+func (c *Context) Login(user *auth.User, opts ...auth.LoginOption) (*auth.Session, error) {
+	if c.Response == nil || c.Request == nil {
+		return nil, http.ErrNotSupported
+	}
+	return auth.Default.Login(c.Response, c.Request, user, opts...)
+}
+
+// Logout clears the current session and invalidates the session cookie.
+func (c *Context) Logout() {
+	if c.Response != nil && c.Request != nil {
+		auth.Default.Logout(c.Response, c.Request)
+	}
+}
+
+// Flash stores a one-time flash message in a cookie for the given key.
+func (c *Context) Flash(key, val string) {
+	if c.Response != nil && c.Request != nil {
+		auth.SetFlash(c.Response, c.Request, key, val)
+	}
+}
+
+// GetFlash retrieves and clears the one-time flash message for the given key.
+func (c *Context) GetFlash(key string) string {
+	if c.Response != nil && c.Request != nil {
+		return auth.GetFlash(c.Response, c.Request, key)
+	}
+	return ""
+}
+
+// RedirectIntended redirects to the previously intended URL if present, or to fallbackURL.
+func (c *Context) RedirectIntended(fallbackURL string, code ...int) (any, error) {
+	statusCode := http.StatusFound
+	if len(code) > 0 {
+		statusCode = code[0]
+	}
+	target := auth.GetIntendedURL(c.Response, c.Request, fallbackURL)
+	if c.Response != nil && c.Request != nil {
+		http.Redirect(c.Response, c.Request, target, statusCode)
+	}
+	return map[string]string{"redirect": target}, nil
+}
+
+// HasRole checks if the authenticated user has any of the specified roles.
+func (c *Context) HasRole(roles ...string) bool {
+	u := c.User()
+	if u == nil {
+		return false
+	}
+	for _, required := range roles {
+		for _, r := range u.Roles {
+			if r == required {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// Can checks if the authenticated user has a specific permission via rbac.Default.
+func (c *Context) Can(perm string) bool {
+	u := c.User()
+	if u == nil {
+		return false
+	}
+	return rbac.Default.UserHas(u, rbac.Permission(perm))
 }
 
 var (
