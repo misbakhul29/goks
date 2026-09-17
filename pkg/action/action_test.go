@@ -273,6 +273,14 @@ func TestAction_AuthAndSessionHelpers(t *testing.T) {
 		t.Fatal("expected non-empty session token")
 	}
 
+	// Immediate state sync test: ctx.User() must be available immediately without reload
+	if !ctx.IsAuthenticated() {
+		t.Fatal("expected ctx.IsAuthenticated() to be true immediately after ctx.Login")
+	}
+	if u := ctx.User(); u == nil || u.Email != "action_user@example.com" {
+		t.Fatalf("expected immediate user action_user@example.com, got %v", u)
+	}
+
 	// Verify cookies set
 	cookies := rec.Result().Cookies()
 	var authCookie *http.Cookie
@@ -284,15 +292,6 @@ func TestAction_AuthAndSessionHelpers(t *testing.T) {
 	}
 	if authCookie == nil {
 		t.Fatal("expected goks_session cookie to be set")
-	}
-
-	// Attach cookie to request to test User(), HasRole(), Can()
-	req.AddCookie(authCookie)
-	if !ctx.IsAuthenticated() {
-		t.Fatal("expected authenticated after cookie attached")
-	}
-	if u := ctx.User(); u == nil || u.Email != "action_user@example.com" {
-		t.Fatalf("expected user action_user@example.com, got %v", u)
 	}
 
 	if !ctx.HasRole("editor") {

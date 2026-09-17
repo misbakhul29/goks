@@ -104,13 +104,19 @@ func (c *Context) Login(user *auth.User, opts ...auth.LoginOption) (*auth.Sessio
 	if c.Response == nil || c.Request == nil {
 		return nil, http.ErrNotSupported
 	}
-	return auth.Default.Login(c.Response, c.Request, user, opts...)
+	sess, err := auth.Default.Login(c.Response, c.Request, user, opts...)
+	if err != nil {
+		return nil, err
+	}
+	c.Request = c.Request.WithContext(auth.ContextWithSession(c.Request.Context(), sess))
+	return sess, nil
 }
 
 // Logout clears the current session and invalidates the session cookie.
 func (c *Context) Logout() {
 	if c.Response != nil && c.Request != nil {
 		auth.Default.Logout(c.Response, c.Request)
+		c.Request = c.Request.WithContext(auth.ContextWithSession(c.Request.Context(), nil))
 	}
 }
 

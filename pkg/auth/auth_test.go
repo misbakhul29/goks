@@ -345,3 +345,96 @@ func TestGuestMiddleware(t *testing.T) {
 		t.Fatalf("expected redirect to /custom-dashboard, got %q", loc)
 	}
 }
+
+func TestFlash_NilWriter(t *testing.T) {
+	req := httptest.NewRequest("GET", "/", nil)
+	// Must not panic when w is nil
+	auth.SetFlash(nil, req, "key", "val")
+	val := auth.GetFlash(nil, req, "key")
+	if val != "" {
+		t.Fatalf("expected empty flash, got %q", val)
+	}
+
+	auth.SetIntendedURL(nil, req, "/admin")
+	target := auth.GetIntendedURL(nil, req, "/fallback")
+	if target != "/fallback" {
+		t.Fatalf("expected /fallback, got %q", target)
+	}
+}
+
+func TestManager_NilGuards(t *testing.T) {
+	m := auth.New(time.Hour)
+	defer m.Close()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/login", nil)
+	user := &auth.User{ID: 1, Email: "user@example.com"}
+
+	// Nil ResponseWriter
+	if _, err := m.Login(nil, req, user); err == nil {
+		t.Fatal("expected error on nil ResponseWriter")
+	}
+
+	// Nil Request
+	if _, err := m.Login(rec, nil, user); err == nil {
+		t.Fatal("expected error on nil Request")
+	}
+
+	// Nil User
+	if _, err := m.Login(rec, req, nil); err == nil {
+		t.Fatal("expected error on nil User")
+	}
+
+	// Logout with nil ResponseWriter should not panic
+	m.Logout(nil, req)
+	m.Logout(rec, nil)
+}
+
+func TestRateLimiter_Pruning(t *testing.T) {
+	limiter := auth.NewRateLimiter(5, 50*time.Millisecond)
+	limiter.Hit("10.0.0.1")
+	limiter.Hit("10.0.0.2")
+
+	if limiter.Attempts("10.0.0.1") != 1 {
+		t.Fatal("expected 1 attempt")
+	}
+
+	// Wait for window to expire
+	time.Sleep(60 * time.Millisecond)
+
+	limiter.Prune()
+	if limiter.Attempts("10.0.0.1") != 0 {
+		t.Fatal("expected 0 attempts after expiration and prune")
+	}
+}
+
+func TestRequired_APIContentNegotiation(t *testing.T) {
+	mw := auth.Required("/login")
+	handler := mw(func(ctx *router.Context) error {
+		return ctx.Text("ok")
+	})
+
+	// JSON request
+	req := httptest.NewRequest("GET", "/api/settings", nil)
+	req.Header.Set("Accept", "application/json")
+	rec := httptest.NewRecorder()
+	ctx := router.NewTestContext(rec, req)
+
+	_ = handler(ctx)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for API request, got %d", rec.Code)
+	}
+
+	// Standard browser request
+	reqBrowser := httptest.NewRequest("GET", "/settings", nil)
+	recBrowser := httptest.NewRecorder()
+	ctxBrowser := router.NewTestContext(recBrowser, reqBrowser)
+
+	_ = handler(ctxBrowser)
+	if recBrowser.Code != http.StatusFound {
+		t.Fatalf("expected 302 for browser request, got %d", recBrowser.Code)
+	}
+	if loc := recBrowser.Header().Get("Location"); loc != "/login" {
+		t.Fatalf("expected redirect to /login, got %q", loc)
+	}
+}

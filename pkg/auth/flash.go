@@ -15,6 +15,9 @@ const (
 
 // SetFlash stores a one-time flash message in a cookie for the given key.
 func SetFlash(w http.ResponseWriter, r *http.Request, key, val string) {
+	if w == nil {
+		return
+	}
 	cookieName := flashCookiePrefix + sanitizeCookieName(key)
 	encoded := base64.RawURLEncoding.EncodeToString([]byte(val))
 	secure := r != nil && (r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https")
@@ -40,15 +43,17 @@ func GetFlash(w http.ResponseWriter, r *http.Request, key string) string {
 		return ""
 	}
 
-	// Invalidate the flash cookie on read
-	http.SetCookie(w, &http.Cookie{
-		Name:     cookieName,
-		Value:    "",
-		Path:     "/",
-		Expires:  time.Unix(0, 0),
-		MaxAge:   -1,
-		HttpOnly: true,
-	})
+	// Invalidate the flash cookie on read if response writer is provided
+	if w != nil {
+		http.SetCookie(w, &http.Cookie{
+			Name:     cookieName,
+			Value:    "",
+			Path:     "/",
+			Expires:  time.Unix(0, 0),
+			MaxAge:   -1,
+			HttpOnly: true,
+		})
+	}
 
 	decoded, err := base64.RawURLEncoding.DecodeString(cookie.Value)
 	if err != nil {
@@ -59,7 +64,7 @@ func GetFlash(w http.ResponseWriter, r *http.Request, key string) string {
 
 // SetIntendedURL stores the requested URL before redirecting to login.
 func SetIntendedURL(w http.ResponseWriter, r *http.Request, targetURL string) {
-	if !isValidInternalURL(targetURL) {
+	if w == nil || !isValidInternalURL(targetURL) {
 		return
 	}
 	secure := r != nil && (r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https")
@@ -90,15 +95,17 @@ func GetIntendedURL(w http.ResponseWriter, r *http.Request, fallbackURL string) 
 		return fallbackURL
 	}
 
-	// Invalidate cookie
-	http.SetCookie(w, &http.Cookie{
-		Name:     intendedURLCookie,
-		Value:    "",
-		Path:     "/",
-		Expires:  time.Unix(0, 0),
-		MaxAge:   -1,
-		HttpOnly: true,
-	})
+	// Invalidate cookie if response writer is provided
+	if w != nil {
+		http.SetCookie(w, &http.Cookie{
+			Name:     intendedURLCookie,
+			Value:    "",
+			Path:     "/",
+			Expires:  time.Unix(0, 0),
+			MaxAge:   -1,
+			HttpOnly: true,
+		})
+	}
 
 	raw, err := base64.RawURLEncoding.DecodeString(cookie.Value)
 	if err != nil {

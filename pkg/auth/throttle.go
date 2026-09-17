@@ -41,6 +41,11 @@ func (l *RateLimiter) Hit(key string) int {
 	now := time.Now()
 	cutoff := now.Add(-l.window)
 
+	// Opportunistic cleanup of stale keys if the map gets large
+	if len(l.attempts) > 256 {
+		l.pruneUnlocked(cutoff)
+	}
+
 	var valid []time.Time
 	for _, t := range l.attempts[key] {
 		if t.After(cutoff) {
@@ -50,6 +55,29 @@ func (l *RateLimiter) Hit(key string) int {
 	valid = append(valid, now)
 	l.attempts[key] = valid
 	return len(valid)
+}
+
+// Prune removes all entries from the limiter whose timestamps have expired.
+func (l *RateLimiter) Prune() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	cutoff := time.Now().Add(-l.window)
+	l.pruneUnlocked(cutoff)
+}
+
+func (l *RateLimiter) pruneUnlocked(cutoff time.Time) {
+	for k, times := range l.attempts {
+		hasActive := false
+		for _, t := range times {
+			if t.After(cutoff) {
+				hasActive = true
+				break
+			}
+		}
+		if !hasActive {
+			delete(l.attempts, k)
+		}
+	}
 }
 
 // TooManyAttempts checks if the key has exceeded the allowed attempt threshold.

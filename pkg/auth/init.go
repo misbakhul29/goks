@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/misbakhul29/goks/pkg/router"
@@ -27,15 +28,15 @@ func IsAuthenticated(ctx *router.Context) bool {
 
 // LoginFromContext creates a session and cookie for the given user using router.Context.
 func LoginFromContext(ctx *router.Context, user *User, opts ...LoginOption) (*Session, error) {
-	if ctx == nil {
-		return nil, http.ErrNotSupported
+	if ctx == nil || ctx.Response() == nil || ctx.Request() == nil {
+		return nil, errors.New("auth: router context, response, or request is nil")
 	}
 	return Default.Login(ctx.Response(), ctx.Request(), user, opts...)
 }
 
 // LogoutFromContext clears the user session and cookie using router.Context.
 func LogoutFromContext(ctx *router.Context) {
-	if ctx != nil {
+	if ctx != nil && ctx.Response() != nil {
 		Default.Logout(ctx.Response(), ctx.Request())
 	}
 }

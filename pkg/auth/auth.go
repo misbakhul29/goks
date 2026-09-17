@@ -5,7 +5,9 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -88,6 +90,13 @@ func (m *Manager) Close() {
 // Login creates a new session for the given user and sets a cookie.
 // It invalidates any existing session token from the request to prevent session fixation.
 func (m *Manager) Login(w http.ResponseWriter, r *http.Request, user *User, opts ...LoginOption) (*Session, error) {
+	if w == nil || r == nil {
+		return nil, errors.New("auth: response writer and request cannot be nil")
+	}
+	if user == nil {
+		return nil, errors.New("auth: cannot create session for nil user")
+	}
+
 	cfg := loginConfig{ttl: m.ttl}
 	for _, opt := range opts {
 		opt(&cfg)
@@ -134,21 +143,29 @@ func (m *Manager) Login(w http.ResponseWriter, r *http.Request, user *User, opts
 	}
 
 	http.SetCookie(w, cookie)
-	triggerLoginHooks(r.Context(), user, r)
+	reqCtx := r.Context()
+	if reqCtx == nil {
+		reqCtx = context.Background()
+	}
+	triggerLoginHooks(reqCtx, user, r)
 	return sess, nil
 }
 
 // Logout invalidates the session and clears the cookie.
 func (m *Manager) Logout(w http.ResponseWriter, r *http.Request) {
+	if w == nil {
+		return
+	}
 	var user *User
-	cookie, err := r.Cookie("goks_session")
-	if err == nil {
-		m.mu.Lock()
-		if sess, ok := m.sessions[cookie.Value]; ok {
-			user = sess.User
-			delete(m.sessions, cookie.Value)
+	if r != nil {
+		if cookie, err := r.Cookie("goks_session"); err == nil {
+			m.mu.Lock()
+			if sess, ok := m.sessions[cookie.Value]; ok {
+				user = sess.User
+				delete(m.sessions, cookie.Value)
+			}
+			m.mu.Unlock()
 		}
-		m.mu.Unlock()
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name:    "goks_session",
@@ -158,7 +175,11 @@ func (m *Manager) Logout(w http.ResponseWriter, r *http.Request) {
 		MaxAge:  -1,
 	})
 	if user != nil {
-		triggerLogoutHooks(r.Context(), user, r)
+		var reqCtx context.Context = context.Background()
+		if r != nil && r.Context() != nil {
+			reqCtx = r.Context()
+		}
+		triggerLogoutHooks(reqCtx, user, r)
 	}
 }
 
@@ -188,6 +209,14 @@ type contextKey string
 
 const sessionKey contextKey = "goks_session"
 
+// ContextWithSession injects the authenticated session into the context.
+func ContextWithSession(ctx context.Context, sess *Session) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, sessionKey, sess)
+}
+
 // Required is middleware that requires an authenticated session.
 // If unauthenticated, it records the current request URI as the intended destination and redirects to /login (or custom path).
 func Required(redirectTo ...string) router.MiddlewareFunc {
@@ -200,13 +229,19 @@ func Required(redirectTo ...string) router.MiddlewareFunc {
 		return func(ctx *router.Context) error {
 			sess, ok := Default.SessionFromRequest(ctx.Request())
 			if !ok {
-				if ctx.Request().Method == http.MethodGet {
+				// API/JSON content-negotiation: return 401 instead of redirecting
+				if strings.Contains(ctx.Header("Accept"), "application/json") || strings.HasPrefix(ctx.Path(), "/api/") {
+					return ctx.Status(http.StatusUnauthorized).JSON(map[string]string{
+						"error": "authentication required",
+					})
+				}
+				if ctx.Request() != nil && ctx.Request().Method == http.MethodGet && ctx.Request().URL != nil {
 					SetIntendedURL(ctx.Response(), ctx.Request(), ctx.Request().URL.RequestURI())
 				}
 				return ctx.Redirect(loginURL, http.StatusFound)
 			}
 			req := ctx.Request().WithContext(
-				context.WithValue(ctx.Request().Context(), sessionKey, sess),
+				ContextWithSession(ctx.Request().Context(), sess),
 			)
 			ctx.SetRequest(req)
 			return next(ctx)
