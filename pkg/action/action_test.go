@@ -164,3 +164,43 @@ func TestAction_URLHelper(t *testing.T) {
 		t.Fatalf("expected /__goks_action?name=deleteUser, got %q", u)
 	}
 }
+
+func TestAction_CSRF_RefererAndSecFetchSite(t *testing.T) {
+	handler := action.Handler()
+
+	form := url.Values{}
+	form.Set("name", "createItem")
+
+	// 1. Rejected when Sec-Fetch-Site is cross-site
+	req1 := httptest.NewRequest(http.MethodPost, "/__goks_action?name=createItem", strings.NewReader(form.Encode()))
+	req1.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req1.Header.Set("Sec-Fetch-Site", "cross-site")
+	req1.Host = "localhost:3000"
+	rec1 := httptest.NewRecorder()
+	handler.ServeHTTP(rec1, req1)
+	if rec1.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden for cross-site Sec-Fetch-Site, got %d", rec1.Code)
+	}
+
+	// 2. Rejected when Origin is empty but Referer is cross-origin
+	req2 := httptest.NewRequest(http.MethodPost, "/__goks_action?name=createItem", strings.NewReader(form.Encode()))
+	req2.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req2.Header.Set("Referer", "http://evil.example.com/phishing")
+	req2.Host = "localhost:3000"
+	rec2 := httptest.NewRecorder()
+	handler.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden for cross-origin Referer, got %d", rec2.Code)
+	}
+
+	// 3. Accepted when Origin is empty and Referer is same-origin
+	req3 := httptest.NewRequest(http.MethodPost, "/__goks_action?name=createItem", strings.NewReader(form.Encode()))
+	req3.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req3.Header.Set("Referer", "http://localhost:3000/dashboard")
+	req3.Host = "localhost:3000"
+	rec3 := httptest.NewRecorder()
+	handler.ServeHTTP(rec3, req3)
+	if rec3.Code != http.StatusSeeOther {
+		t.Fatalf("expected 303 See Other for same-origin Referer, got %d: %s", rec3.Code, rec3.Body.String())
+	}
+}

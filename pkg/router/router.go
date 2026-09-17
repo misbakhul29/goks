@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 )
 
 // Handler is the function signature for GoKS page/API handlers.
@@ -17,6 +18,7 @@ type MiddlewareFunc func(Handler) Handler
 
 // Router is the GoKS HTTP router.
 type Router struct {
+	mu               sync.RWMutex
 	routes           []*Route
 	middlewares      []MiddlewareFunc
 	notFound         Handler
@@ -47,6 +49,8 @@ func New() *Router {
 
 // Use adds global middleware to the router.
 func (r *Router) Use(mw ...MiddlewareFunc) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.middlewares = append(r.middlewares, mw...)
 }
 
@@ -54,6 +58,8 @@ func (r *Router) Use(mw ...MiddlewareFunc) {
 func (r *Router) Handle(method, pattern string, h Handler) {
 	method = strings.ToUpper(method)
 	pattern = normalizePath(pattern)
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	for _, existing := range r.routes {
 		if existing.method == method && existing.pattern == pattern {
 			existing.handler = h
@@ -94,6 +100,8 @@ func (r *Router) Routes() []RouteInfo {
 	if r == nil {
 		return nil
 	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	res := make([]RouteInfo, 0, len(r.routes))
 	for _, rt := range r.routes {
 		res = append(res, RouteInfo{
@@ -105,10 +113,18 @@ func (r *Router) Routes() []RouteInfo {
 }
 
 // NotFound registers a custom 404 handler.
-func (r *Router) NotFound(h Handler) { r.notFound = h }
+func (r *Router) NotFound(h Handler) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.notFound = h
+}
 
 // MethodNotAllowed registers a custom 405 handler.
-func (r *Router) MethodNotAllowed(h Handler) { r.methodNotAllowed = h }
+func (r *Router) MethodNotAllowed(h Handler) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.methodNotAllowed = h
+}
 
 // calculateRouteScore determines precedence: static (100) > dynamic (10) > wildcard (1)
 func calculateRouteScore(parts []string) int {
@@ -129,12 +145,21 @@ func calculateRouteScore(parts []string) int {
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	path := normalizePath(req.URL.Path)
 
+	r.mu.RLock()
+	routes := make([]*Route, len(r.routes))
+	copy(routes, r.routes)
+	middlewares := make([]MiddlewareFunc, len(r.middlewares))
+	copy(middlewares, r.middlewares)
+	notFound := r.notFound
+	methodNotAllowed := r.methodNotAllowed
+	r.mu.RUnlock()
+
 	var matched *Route
 	var matchedParams map[string]string
 	bestScore := -1
 	var allowedMethods []string
 
-	for _, route := range r.routes {
+	for _, route := range routes {
 		if ok, p := matchRoute(route.parts, path); ok {
 			if route.method == req.Method || (req.Method == "HEAD" && route.method == "GET") {
 				score := calculateRouteScore(route.parts)
@@ -156,14 +181,14 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		h = matched.handler
 	} else if len(allowedMethods) > 0 {
 		w.Header().Set("Allow", strings.Join(allowedMethods, ", "))
-		h = r.methodNotAllowed
+		h = methodNotAllowed
 	} else {
-		h = r.notFound
+		h = notFound
 	}
 
 	// Wrap with middlewares (outermost first)
-	for i := len(r.middlewares) - 1; i >= 0; i-- {
-		h = r.middlewares[i](h)
+	for i := len(middlewares) - 1; i >= 0; i-- {
+		h = middlewares[i](h)
 	}
 
 	if err := h(ctx); err != nil && !ctx.IsWritten() {
@@ -262,6 +287,24 @@ func (g *Group) POST(pattern string, h Handler)   { g.handle("POST", pattern, h)
 func (g *Group) PUT(pattern string, h Handler)    { g.handle("PUT", pattern, h) }
 func (g *Group) DELETE(pattern string, h Handler) { g.handle("DELETE", pattern, h) }
 func (g *Group) PATCH(pattern string, h Handler)  { g.handle("PATCH", pattern, h) }
+
+// Group creates a nested route group with a combined prefix and chained middlewares.
+func (g *Group) Group(prefix string, mw ...MiddlewareFunc) *Group {
+	fullPrefix := normalizePath(g.prefix + "/" + strings.TrimPrefix(prefix, "/"))
+	combinedMW := make([]MiddlewareFunc, 0, len(g.middlewares)+len(mw))
+	combinedMW = append(combinedMW, g.middlewares...)
+	combinedMW = append(combinedMW, mw...)
+	return &Group{
+		router:      g.router,
+		prefix:      fullPrefix,
+		middlewares: combinedMW,
+	}
+}
+
+// Use adds middleware to the route group.
+func (g *Group) Use(mw ...MiddlewareFunc) {
+	g.middlewares = append(g.middlewares, mw...)
+}
 
 // -----------------------------------------------------------------------
 // Context key type

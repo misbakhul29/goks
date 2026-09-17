@@ -92,11 +92,23 @@ func Handler() http.HandlerFunc {
 			return
 		}
 
-		// CSRF protection: ensure same-origin if Origin header is present.
-		origin := r.Header.Get("Origin")
-		if origin != "" && !sameOrigin(r, origin) {
+		// CSRF protection: validate Sec-Fetch-Site, Origin, and Referer.
+		if secSite := r.Header.Get("Sec-Fetch-Site"); secSite == "cross-site" {
 			http.Error(w, "cross-origin actions not allowed", http.StatusForbidden)
 			return
+		}
+
+		origin := r.Header.Get("Origin")
+		if origin != "" {
+			if !sameOrigin(r, origin) {
+				http.Error(w, "cross-origin actions not allowed", http.StatusForbidden)
+				return
+			}
+		} else if referer := r.Header.Get("Referer"); referer != "" {
+			if !sameOriginReferer(r, referer) {
+				http.Error(w, "cross-origin actions not allowed", http.StatusForbidden)
+				return
+			}
 		}
 
 		// Limit payload to 10MB to avoid memory exhaustion
@@ -217,4 +229,16 @@ func effectivePort(u *url.URL) string {
 		return "443"
 	}
 	return "80"
+}
+
+func sameOriginReferer(r *http.Request, rawReferer string) bool {
+	if strings.HasPrefix(rawReferer, "/") && !strings.HasPrefix(rawReferer, "//") {
+		return true // relative referer path is same-origin
+	}
+	refURL, err := url.Parse(rawReferer)
+	if err != nil || refURL.Scheme == "" || refURL.Host == "" {
+		return false
+	}
+	originFromRef := refURL.Scheme + "://" + refURL.Host
+	return sameOrigin(r, originFromRef)
 }

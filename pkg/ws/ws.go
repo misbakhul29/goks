@@ -200,6 +200,13 @@ func (c *Client) Send(msg []byte) {
 	_ = c.enqueue(msg)
 }
 
+const (
+	writeWait      = 10 * time.Second
+	pongWait       = 60 * time.Second
+	pingPeriod     = (pongWait * 9) / 10
+	maxMessageSize = 512 * 1024 // 512 KB maximum frame size
+)
+
 // Handler returns an http.HandlerFunc that upgrades connections and registers them with the hub.
 func (h *Hub) Handler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -219,12 +226,36 @@ func (h *Hub) Handler() http.HandlerFunc {
 		h.clients[client] = true
 		h.mu.Unlock()
 
+		conn.SetReadLimit(maxMessageSize)
+		_ = conn.SetReadDeadline(time.Now().Add(pongWait))
+		conn.SetPongHandler(func(string) error {
+			_ = conn.SetReadDeadline(time.Now().Add(pongWait))
+			return nil
+		})
+
 		// Writer goroutine
 		go func() {
-			defer conn.Close()
-			for msg := range client.send {
-				if err := conn.WriteMessage(websocket.TextMessage, msg); err != nil {
-					break
+			ticker := time.NewTicker(pingPeriod)
+			defer func() {
+				ticker.Stop()
+				_ = conn.Close()
+			}()
+			for {
+				select {
+				case msg, ok := <-client.send:
+					_ = conn.SetWriteDeadline(time.Now().Add(writeWait))
+					if !ok {
+						_ = conn.WriteMessage(websocket.CloseMessage, []byte{})
+						return
+					}
+					if err := conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+						return
+					}
+				case <-ticker.C:
+					_ = conn.SetWriteDeadline(time.Now().Add(writeWait))
+					if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+						return
+					}
 				}
 			}
 		}()

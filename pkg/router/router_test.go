@@ -2,9 +2,11 @@ package router_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/misbakhul29/goks/pkg/router"
@@ -441,4 +443,87 @@ func TestRouter_ContextErrorMethod(t *testing.T) {
 	if errResp.Error.RequestID == "" {
 		t.Fatal("expected request_id in error payload")
 	}
+}
+
+func TestRouter_NestedGroups(t *testing.T) {
+	r := router.New()
+
+	var order []string
+
+	mw1 := func(next router.Handler) router.Handler {
+		return func(ctx *router.Context) error {
+			order = append(order, "mw1")
+			return next(ctx)
+		}
+	}
+	mw2 := func(next router.Handler) router.Handler {
+		return func(ctx *router.Context) error {
+			order = append(order, "mw2")
+			return next(ctx)
+		}
+	}
+
+	api := r.Group("/api", mw1)
+	v1 := api.Group("/v1", mw2)
+
+	v1.GET("/users", func(ctx *router.Context) error {
+		return ctx.Text("users-list")
+	})
+
+	req := httptest.NewRequest("GET", "/api/v1/users", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	if rec.Body.String() != "users-list" {
+		t.Fatalf("expected 'users-list', got %q", rec.Body.String())
+	}
+
+	if len(order) != 2 || order[0] != "mw1" || order[1] != "mw2" {
+		t.Fatalf("expected middlewares mw1 then mw2, got %v", order)
+	}
+}
+
+func TestRouter_ConcurrentAccess(t *testing.T) {
+	r := router.New()
+	r.GET("/static", func(ctx *router.Context) error {
+		return ctx.Text("static")
+	})
+
+	var wg sync.WaitGroup
+
+	// Concurrently serve requests
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 50; j++ {
+				req := httptest.NewRequest("GET", "/static", nil)
+				rec := httptest.NewRecorder()
+				r.ServeHTTP(rec, req)
+				if rec.Code != 200 {
+					t.Errorf("expected 200, got %d", rec.Code)
+				}
+			}
+		}()
+	}
+
+	// Concurrently add new routes and inspect routes
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			for j := 0; j < 20; j++ {
+				path := fmt.Sprintf("/dyn-%d-%d", id, j)
+				r.GET(path, func(ctx *router.Context) error {
+					return ctx.Text("dyn")
+				})
+				_ = r.Routes()
+			}
+		}(i)
+	}
+
+	wg.Wait()
 }
