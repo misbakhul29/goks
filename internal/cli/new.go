@@ -52,8 +52,9 @@ func scaffoldApp(name string, modPath string) error {
 
 	dirs := []string{
 		"app", "app/components",
-		"components", "models", "services",
-		"repositories", "middleware", "api", "public",
+		"components", "database", "database/models", "database/repositories",
+		"database/migrations", "database/seeds",
+		"services", "middleware", "api", "public",
 	}
 	for _, d := range dirs {
 		path := filepath.Join(appDir, d)
@@ -74,21 +75,21 @@ func scaffoldApp(name string, modPath string) error {
 	}
 
 	files := map[string]string{
-		"go.mod":                    tmplGoMod,
-		"app/layout.gox":            tmplLayout,
-		"app/page.gox":              tmplPage,
-		"app/components/hero.gox":   tmplHeroComponent,
-		"components/button.gox":     tmplExampleComponent,
-		"models/user.go":            tmplExampleModel,
-		"services/user_service.go":  tmplExampleService,
-		"repositories/user_repo.go": tmplExampleRepository,
-		"api/routes.go":             tmplExampleAPI,
-		"config/goks.config.go":     tmplConfig,
-		"middleware/logger.go":      tmplMiddleware,
-		".gitignore":                tmplGitignore,
-		"README.md":                 tmplReadme,
-		"public/global.css":         tmplGlobalCss,
-		"public/favicon.ico":        "", // empty placeholder
+		"go.mod":                             tmplGoMod,
+		"app/layout.gox":                     tmplLayout,
+		"app/page.gox":                       tmplPage,
+		"app/components/hero.gox":            tmplHeroComponent,
+		"components/button.gox":              tmplExampleComponent,
+		"database/models/user.go":            tmplExampleModel,
+		"services/user_service.go":           tmplExampleService,
+		"database/repositories/user_repo.go": tmplExampleRepository,
+		"api/routes.go":                      tmplExampleAPI,
+		"config/goks.config.go":              tmplConfig,
+		"middleware/logger.go":               tmplMiddleware,
+		".gitignore":                         tmplGitignore,
+		"README.md":                          tmplReadme,
+		"public/global.css":                  tmplGlobalCss,
+		"public/favicon.ico":                 "", // empty placeholder
 	}
 
 	for relPath, tmplStr := range files {

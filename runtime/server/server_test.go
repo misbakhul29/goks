@@ -398,3 +398,26 @@ func TestServer_GracefulShutdownWithWSHub(t *testing.T) {
 		t.Fatalf("expected 0 clients in hub after shutdown, got %d", hub.ClientCount())
 	}
 }
+
+func TestServer_CustomRoutes(t *testing.T) {
+	srv := New(Config{
+		AppDir: t.TempDir(),
+		Routes: func(r *router.Router) {
+			r.GET("/api/test", func(c *router.Context) error {
+				return c.JSON(map[string]string{"result": "ok"})
+			})
+		},
+	})
+	srv.setupRoutes()
+
+	req := httptest.NewRequest("GET", "/api/test", nil)
+	rec := httptest.NewRecorder()
+	srv.Router().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), `"result":"ok"`) {
+		t.Fatalf("expected JSON body containing ok, got %s", rec.Body.String())
+	}
+}

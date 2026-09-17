@@ -40,3 +40,22 @@ func TestDBCmd_MakeMigration_Validation(t *testing.T) {
 		}
 	}
 }
+
+func TestDBCmd_ResolveMigrationsDir_DatabaseFolder(t *testing.T) {
+	tempDir := t.TempDir()
+	dbDir := filepath.Join(tempDir, "database", "migrations")
+	if err := os.MkdirAll(dbDir, 0755); err != nil {
+		t.Fatalf("failed to create database/migrations: %v", err)
+	}
+
+	cmd := cli.DBCmd()
+	cmd.SetArgs([]string{"make:migration", "create_users_table", "--dir", tempDir})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("expected successful migration creation, got: %v", err)
+	}
+
+	files, err := os.ReadDir(dbDir)
+	if err != nil || len(files) != 1 {
+		t.Fatalf("expected 1 migration in database/migrations, got: %v", files)
+	}
+}

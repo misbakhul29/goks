@@ -54,6 +54,7 @@ type Config struct {
 	Standalone  bool                    // if true, serve assets from embedded FS (standalone build)
 	Root        component.Renderable    // Root component for Server-Side Rendering (SSR)
 	Middlewares []router.MiddlewareFunc // User-defined global middlewares
+	Routes      func(*router.Router)    // Optional custom route registration
 	WSHub       *ws.Hub                 // Optional WebSocket hub whose lifecycle is managed with the server
 
 	// Standalone mode: embedded filesystems (set by generated server_main.go)
@@ -262,6 +263,10 @@ func (s *DevServer) initRoutes() {
 		imgOpt.ServeHTTP(ctx.Response(), ctx.Request())
 		return nil
 	})
+
+	if s.cfg.Routes != nil {
+		s.cfg.Routes(s.router)
+	}
 
 	if s.cfg.Standalone && s.cfg.EmbeddedAssets != nil {
 		// ── STANDALONE MODE: serve all assets from embedded FS ──────────────────

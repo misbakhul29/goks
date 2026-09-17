@@ -31,6 +31,11 @@ func (c *Context) Query(key string) string {
 	return c.r.URL.Query().Get(key)
 }
 
+// FormValue returns the first value for the named component of the query or POST/PUT body.
+func (c *Context) FormValue(key string) string {
+	return c.r.FormValue(key)
+}
+
 // Header returns a request header value.
 func (c *Context) Header(key string) string {
 	return c.r.Header.Get(key)

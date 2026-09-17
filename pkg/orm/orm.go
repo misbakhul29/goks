@@ -69,6 +69,26 @@ func Connect(driver, dsn string) (*Database, error) {
 // Raw returns the underlying *sql.DB.
 func (d *Database) Raw() *sql.DB { return d.db }
 
+// Exec executes a query without returning any rows.
+func (d *Database) Exec(query string, args ...any) (sql.Result, error) {
+	return d.db.Exec(query, args...)
+}
+
+// ExecContext executes a query without returning any rows.
+func (d *Database) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	return d.db.ExecContext(ctx, query, args...)
+}
+
+// Query executes a query that returns rows.
+func (d *Database) Query(query string, args ...any) (*sql.Rows, error) {
+	return d.db.Query(query, args...)
+}
+
+// QueryRow executes a query that is expected to return at most one row.
+func (d *Database) QueryRow(query string, args ...any) *sql.Row {
+	return d.db.QueryRow(query, args...)
+}
+
 // Close closes the database connection.
 func (d *Database) Close() error { return d.db.Close() }
 

@@ -62,6 +62,49 @@ func connectDB(appDir string) (*orm.Database, error) {
 
 var validMigrationName = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
 
+func resolveMigrationsDir(appDir string, forCreation bool) string {
+	if appDir == "" {
+		appDir = "."
+	}
+	// 1. If database/migrations exists, prioritize it
+	dbMig := filepath.Join(appDir, "database", "migrations")
+	if info, err := os.Stat(dbMig); err == nil && info.IsDir() {
+		return dbMig
+	}
+	// 2. If db/migrations exists, prioritize it
+	shortDbMig := filepath.Join(appDir, "db", "migrations")
+	if info, err := os.Stat(shortDbMig); err == nil && info.IsDir() {
+		return shortDbMig
+	}
+	if forCreation {
+		// If database/ directory exists, create migrations inside database/migrations
+		if info, err := os.Stat(filepath.Join(appDir, "database")); err == nil && info.IsDir() {
+			return dbMig
+		}
+		// If db/ directory exists, create migrations inside db/migrations
+		if info, err := os.Stat(filepath.Join(appDir, "db")); err == nil && info.IsDir() {
+			return shortDbMig
+		}
+	}
+	// 3. Fallback to migrations/
+	return filepath.Join(appDir, "migrations")
+}
+
+func resolveSeedsDir(appDir string) string {
+	if appDir == "" {
+		appDir = "."
+	}
+	dbSeeds := filepath.Join(appDir, "database", "seeds")
+	if info, err := os.Stat(dbSeeds); err == nil && info.IsDir() {
+		return dbSeeds
+	}
+	shortDbSeeds := filepath.Join(appDir, "db", "seeds")
+	if info, err := os.Stat(shortDbSeeds); err == nil && info.IsDir() {
+		return shortDbSeeds
+	}
+	return filepath.Join(appDir, "seeds")
+}
+
 func dbMakeMigrationCmd() *cobra.Command {
 	var appDir string
 
@@ -80,7 +123,7 @@ func dbMakeMigrationCmd() *cobra.Command {
 				appDir = "."
 			}
 
-			migrationsDir := filepath.Join(appDir, "migrations")
+			migrationsDir := resolveMigrationsDir(appDir, true)
 			if err := os.MkdirAll(migrationsDir, 0755); err != nil {
 				return fmt.Errorf("failed to create migrations directory: %w", err)
 			}
@@ -101,7 +144,11 @@ func dbMakeMigrationCmd() *cobra.Command {
 				return fmt.Errorf("failed to create migration file: %w", err)
 			}
 
-			fmt.Println(color.GreenString("✓ Created migration:"), filepath.Join("migrations", fileName))
+			relDisplay, err := filepath.Rel(appDir, targetFile)
+			if err != nil {
+				relDisplay = targetFile
+			}
+			fmt.Println(color.GreenString("✓ Created migration:"), relDisplay)
 			return nil
 		},
 	}
@@ -127,14 +174,15 @@ func dbMigrateCmd() *cobra.Command {
 			}
 			defer db.Close()
 
-			migrationsDir := filepath.Join(appDir, "migrations")
+			migrationsDir := resolveMigrationsDir(appDir, false)
 			migrations, err := orm.LoadMigrationsFromDir(migrationsDir)
 			if err != nil {
 				return err
 			}
 
 			if len(migrations) == 0 {
-				fmt.Println(color.YellowString("No migration files found in migrations/ directory."))
+				relDir, _ := filepath.Rel(appDir, migrationsDir)
+				fmt.Printf("%s\n", color.YellowString("No migration files found in "+relDir+" directory."))
 				return nil
 			}
 
@@ -173,7 +221,7 @@ func dbRollbackCmd() *cobra.Command {
 			}
 			defer db.Close()
 
-			migrationsDir := filepath.Join(appDir, "migrations")
+			migrationsDir := resolveMigrationsDir(appDir, false)
 			migrations, err := orm.LoadMigrationsFromDir(migrationsDir)
 			if err != nil {
 				return err
@@ -211,7 +259,7 @@ func dbStatusCmd() *cobra.Command {
 			}
 			defer db.Close()
 
-			migrationsDir := filepath.Join(appDir, "migrations")
+			migrationsDir := resolveMigrationsDir(appDir, false)
 			migrations, err := orm.LoadMigrationsFromDir(migrationsDir)
 			if err != nil {
 				return err
@@ -262,14 +310,15 @@ func dbSeedCmd() *cobra.Command {
 			}
 			defer db.Close()
 
-			seedsDir := filepath.Join(appDir, "seeds")
+			seedsDir := resolveSeedsDir(appDir)
 			executed, err := orm.RunSeeders(db, seedsDir)
 			if err != nil {
 				return err
 			}
 
 			if len(executed) == 0 {
-				fmt.Println(color.YellowString("No seed files (.sql) found in seeds/ directory."))
+				relDir, _ := filepath.Rel(appDir, seedsDir)
+				fmt.Printf("%s\n", color.YellowString("No seed files (.sql) found in "+relDir+" directory."))
 				return nil
 			}
 

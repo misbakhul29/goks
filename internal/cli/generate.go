@@ -31,7 +31,15 @@ func genModelCmd() *cobra.Command {
 		Short: "Generate a GoKS model",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			path := filepath.Join("models", strings.ToLower(args[0])+".go")
+			modelDir := "models"
+			if info, err := os.Stat("database/models"); err == nil && info.IsDir() {
+				modelDir = "database/models"
+			} else if info, err := os.Stat("db/models"); err == nil && info.IsDir() {
+				modelDir = "db/models"
+			} else if info, err := os.Stat("database"); err == nil && info.IsDir() {
+				modelDir = "database/models"
+			}
+			path := filepath.Join(modelDir, strings.ToLower(args[0])+".go")
 			if err := writeTemplate(path, tmplGenModel, map[string]string{"Name": args[0]}); err != nil {
 				return err
 			}
