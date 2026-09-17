@@ -45,6 +45,7 @@ func GetFlash(w http.ResponseWriter, r *http.Request, key string) string {
 
 	// Invalidate the flash cookie on read if response writer is provided
 	if w != nil {
+		secure := r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
 		http.SetCookie(w, &http.Cookie{
 			Name:     cookieName,
 			Value:    "",
@@ -52,6 +53,8 @@ func GetFlash(w http.ResponseWriter, r *http.Request, key string) string {
 			Expires:  time.Unix(0, 0),
 			MaxAge:   -1,
 			HttpOnly: true,
+			Secure:   secure,
+			SameSite: http.SameSiteLaxMode,
 		})
 	}
 
@@ -97,6 +100,7 @@ func GetIntendedURL(w http.ResponseWriter, r *http.Request, fallbackURL string) 
 
 	// Invalidate cookie if response writer is provided
 	if w != nil {
+		secure := r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
 		http.SetCookie(w, &http.Cookie{
 			Name:     intendedURLCookie,
 			Value:    "",
@@ -104,6 +108,8 @@ func GetIntendedURL(w http.ResponseWriter, r *http.Request, fallbackURL string) 
 			Expires:  time.Unix(0, 0),
 			MaxAge:   -1,
 			HttpOnly: true,
+			Secure:   secure,
+			SameSite: http.SameSiteLaxMode,
 		})
 	}
 
@@ -119,9 +125,9 @@ func GetIntendedURL(w http.ResponseWriter, r *http.Request, fallbackURL string) 
 }
 
 // isValidInternalURL validates that the target URL is a safe, relative path
-// to prevent open redirect vulnerabilities.
+// to prevent open redirect and CRLF injection vulnerabilities.
 func isValidInternalURL(target string) bool {
-	if target == "" {
+	if target == "" || strings.ContainsAny(target, "\r\n") {
 		return false
 	}
 	// Must start with '/' and not '//' (protocol-relative) or contain backslashes

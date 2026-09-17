@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/fatih/color"
@@ -70,7 +71,7 @@ func runAuthScaffold(appDir string) error {
 
 	timestamp := time.Now().Format("20060102150405")
 	migrationFile := filepath.Join(migrationsDir, fmt.Sprintf("%s_create_users_table.sql", timestamp))
-	if err := writeFileIfNotExist(migrationFile, tmplAuthMigration); err != nil {
+	if err := writeFileIfNotExist(migrationFile, getAuthMigrationSQL(appDir)); err != nil {
 		return err
 	}
 	printCreated(appDir, migrationFile)
@@ -150,6 +151,53 @@ type User struct {
 	UpdatedAt time.Time ` + "`" + `json:"updated_at" orm:"updated_at"` + "`" + `
 }
 `
+
+func getAuthMigrationSQL(appDir string) string {
+	driver := "sqlite"
+	if envBytes, err := os.ReadFile(filepath.Join(appDir, ".env")); err == nil {
+		content := strings.ToLower(string(envBytes))
+		if strings.Contains(content, "postgres") || strings.Contains(content, "postgresql") {
+			driver = "postgres"
+		} else if strings.Contains(content, "mysql") {
+			driver = "mysql"
+		}
+	}
+
+	switch driver {
+	case "postgres":
+		return `-- +goks Up
+CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    role VARCHAR(50) DEFAULT 'user',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- +goks Down
+DROP TABLE IF EXISTS users;
+`
+	case "mysql":
+		return `-- +goks Up
+CREATE TABLE IF NOT EXISTS users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    role VARCHAR(50) DEFAULT 'user',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- +goks Down
+DROP TABLE IF EXISTS users;
+`
+	default:
+		return tmplAuthMigration
+	}
+}
 
 var tmplAuthMigration = `-- +goks Up
 CREATE TABLE IF NOT EXISTS users (

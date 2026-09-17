@@ -167,12 +167,16 @@ func (m *Manager) Logout(w http.ResponseWriter, r *http.Request) {
 			m.mu.Unlock()
 		}
 	}
+	secure := r != nil && (r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https")
 	http.SetCookie(w, &http.Cookie{
-		Name:    "goks_session",
-		Value:   "",
-		Path:    "/",
-		Expires: time.Unix(0, 0),
-		MaxAge:  -1,
+		Name:     "goks_session",
+		Value:    "",
+		Path:     "/",
+		Expires:  time.Unix(0, 0),
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
 	})
 	if user != nil {
 		var reqCtx context.Context = context.Background()

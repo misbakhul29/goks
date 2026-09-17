@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -43,5 +44,35 @@ func TestAuthScaffold_GeneratesFiles(t *testing.T) {
 	// Idempotency check: running scaffold again does not fail or error
 	if err := runAuthScaffold(tempDir); err != nil {
 		t.Fatalf("second runAuthScaffold failed: %v", err)
+	}
+}
+
+func TestAuthScaffold_PostgresDialect(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "goks-auth-pg-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Write .env with postgres
+	_ = os.WriteFile(filepath.Join(tempDir, ".env"), []byte("DATABASE_URL=postgres://user:pass@localhost:5432/testdb\n"), 0644)
+
+	if err := runAuthScaffold(tempDir); err != nil {
+		t.Fatalf("runAuthScaffold failed: %v", err)
+	}
+
+	migDir := filepath.Join(tempDir, "migrations")
+	entries, _ := os.ReadDir(migDir)
+	if len(entries) == 0 {
+		t.Fatal("expected migration file")
+	}
+
+	content, err := os.ReadFile(filepath.Join(migDir, entries[0].Name()))
+	if err != nil {
+		t.Fatalf("failed to read migration: %v", err)
+	}
+
+	if !strings.Contains(string(content), "SERIAL PRIMARY KEY") {
+		t.Fatalf("expected postgres SERIAL PRIMARY KEY in migration, got: %s", string(content))
 	}
 }

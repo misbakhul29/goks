@@ -218,14 +218,19 @@ func (c *Context) GetFlash(key string) string {
 		return ""
 	}
 
-	http.SetCookie(c.w, &http.Cookie{
-		Name:     cookieName,
-		Value:    "",
-		Path:     "/",
-		Expires:  time.Unix(0, 0),
-		MaxAge:   -1,
-		HttpOnly: true,
-	})
+	if c.w != nil {
+		secure := c.r != nil && (c.r.TLS != nil || c.r.Header.Get("X-Forwarded-Proto") == "https")
+		http.SetCookie(c.w, &http.Cookie{
+			Name:     cookieName,
+			Value:    "",
+			Path:     "/",
+			Expires:  time.Unix(0, 0),
+			MaxAge:   -1,
+			HttpOnly: true,
+			Secure:   secure,
+			SameSite: http.SameSiteLaxMode,
+		})
+	}
 
 	decoded, err := base64.RawURLEncoding.DecodeString(cookie.Value)
 	if err != nil {
@@ -243,14 +248,19 @@ func (c *Context) RedirectIntended(fallbackURL string, code ...int) error {
 	target := fallbackURL
 	if c.r != nil {
 		if cookie, err := c.r.Cookie("goks_intended_url"); err == nil && cookie.Value != "" {
-			http.SetCookie(c.w, &http.Cookie{
-				Name:     "goks_intended_url",
-				Value:    "",
-				Path:     "/",
-				Expires:  time.Unix(0, 0),
-				MaxAge:   -1,
-				HttpOnly: true,
-			})
+			if c.w != nil {
+				secure := c.r.TLS != nil || c.r.Header.Get("X-Forwarded-Proto") == "https"
+				http.SetCookie(c.w, &http.Cookie{
+					Name:     "goks_intended_url",
+					Value:    "",
+					Path:     "/",
+					Expires:  time.Unix(0, 0),
+					MaxAge:   -1,
+					HttpOnly: true,
+					Secure:   secure,
+					SameSite: http.SameSiteLaxMode,
+				})
+			}
 			if raw, err := base64.RawURLEncoding.DecodeString(cookie.Value); err == nil {
 				candidate := string(raw)
 				if isSafeInternalPath(candidate) {
@@ -339,7 +349,7 @@ func sanitizeKey(s string) string {
 }
 
 func isSafeInternalPath(target string) bool {
-	if target == "" || !strings.HasPrefix(target, "/") || strings.HasPrefix(target, "//") || strings.Contains(target, `\`) {
+	if target == "" || strings.ContainsAny(target, "\r\n") || !strings.HasPrefix(target, "/") || strings.HasPrefix(target, "//") || strings.Contains(target, `\`) {
 		return false
 	}
 	u, err := url.Parse(target)
