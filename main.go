@@ -41,6 +41,7 @@ func main() {
 		cli.StudioCmd(),
 		cli.ExportCmd(),
 		cli.LSPCmd(),
+		cli.MakeAuthCmd(),
 		versionCmd(),
 	)
 

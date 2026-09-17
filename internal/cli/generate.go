@@ -14,10 +14,23 @@ import (
 func GenerateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "generate",
-		Short:   "Generate GoKS boilerplate (model, page, component)",
+		Short:   "Generate GoKS boilerplate (model, page, component, auth)",
 		Aliases: []string{"g", "gen"},
 	}
-	cmd.AddCommand(genModelCmd(), genPageCmd(), genComponentCmd())
+	cmd.AddCommand(genModelCmd(), genPageCmd(), genComponentCmd(), genAuthCmd())
+	return cmd
+}
+
+func genAuthCmd() *cobra.Command {
+	var appDir string
+	cmd := &cobra.Command{
+		Use:   "auth",
+		Short: "Generate authentication boilerplate (login, register, actions, models, migration)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runAuthScaffold(appDir)
+		},
+	}
+	cmd.Flags().StringVarP(&appDir, "dir", "d", "", "Application root directory (default: current dir)")
 	return cmd
 }
 
