@@ -36,9 +36,16 @@ func RenderToString(node *Node) string {
 
 		// Sort attribute keys for deterministic SSR output across all platforms
 		keys := make([]string, 0, len(node.Props))
-		for k := range node.Props {
-			if strings.HasPrefix(k, "on") || k == "innerHTML" {
-				continue // Skip event listeners and innerHTML on element tag
+		for k, v := range node.Props {
+			if isEventProp(k, v) || k == "innerHTML" || strings.HasPrefix(k, "__goks") {
+				continue // Skip event listeners, internal markers, and innerHTML on element tag
+			}
+			attrName := k
+			if attrName == "className" {
+				attrName = "class"
+			}
+			if !IsValidAttributeName(attrName) {
+				continue // Skip invalid attribute names to prevent attribute injection (L5)
 			}
 			keys = append(keys, k)
 		}
@@ -50,8 +57,12 @@ func RenderToString(node *Node) string {
 			if attrName == "className" {
 				attrName = "class"
 			}
+			valStr := fmt.Sprintf("%v", v)
+			if isDangerousURLScheme(attrName, valStr) {
+				valStr = "about:blank"
+			}
 			// Escape attribute values to prevent XSS injection.
-			escapedVal := html.EscapeString(fmt.Sprintf("%v", v))
+			escapedVal := html.EscapeString(valStr)
 			sb.WriteString(fmt.Sprintf(" %s=\"%s\"", attrName, escapedVal))
 		}
 		sb.WriteString(">")
@@ -62,7 +73,8 @@ func RenderToString(node *Node) string {
 			return sb.String()
 		}
 
-		// Handle innerHTML
+		// Handle innerHTML: Raw unescaped HTML sink (CWE-79).
+		// CAUTION: Caller must sanitize user data before injecting into innerHTML to prevent XSS.
 		if html, ok := node.Props["innerHTML"]; ok {
 			sb.WriteString(fmt.Sprintf("%v", html))
 		} else {

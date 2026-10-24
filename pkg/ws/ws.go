@@ -119,6 +119,7 @@ type Hub struct {
 	clients      map[*Client]bool
 	onMsg        func(client *Client, msg []byte)
 	onDisconnect func(client *Client)
+	authFn       func(r *http.Request) (string, error)
 }
 
 // NewHub creates a new WebSocket hub.
@@ -126,6 +127,15 @@ func NewHub() *Hub {
 	return &Hub{
 		clients: make(map[*Client]bool),
 	}
+}
+
+// Authenticate registers a function that authenticates the WebSocket upgrade handshake.
+// If the function returns an error, the connection upgrade is aborted with HTTP 401.
+// If successful, the returned client ID is assigned to Client.ID.
+func (h *Hub) Authenticate(fn func(r *http.Request) (string, error)) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.authFn = fn
 }
 
 // OnMessage registers a handler called when any client sends a message.
@@ -210,6 +220,20 @@ const (
 // Handler returns an http.HandlerFunc that upgrades connections and registers them with the hub.
 func (h *Hub) Handler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		h.mu.RLock()
+		authFn := h.authFn
+		h.mu.RUnlock()
+
+		clientID := ""
+		if authFn != nil {
+			id, err := authFn(r)
+			if err != nil {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			clientID = id
+		}
+
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			log.Printf("[GoKS/ws] upgrade error: %v", err)
@@ -220,6 +244,7 @@ func (h *Hub) Handler() http.HandlerFunc {
 			conn: conn,
 			send: make(chan []byte, 256),
 			hub:  h,
+			ID:   clientID,
 		}
 
 		h.mu.Lock()

@@ -5,7 +5,6 @@ package router
 import (
 	"context"
 	"net/http"
-	"net/url"
 	"strings"
 	"sync"
 )
@@ -196,7 +195,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-// matchRoute checks if a URL path matches a route pattern, extracting params with URL unescaping.
+// matchRoute checks if a URL path matches a route pattern, extracting params without double URL unescaping.
 func matchRoute(patternParts []string, path string) (bool, map[string]string) {
 	pathParts := strings.Split(strings.Trim(path, "/"), "/")
 
@@ -218,22 +217,12 @@ func matchRoute(patternParts []string, path string) (bool, map[string]string) {
 	for i, pp := range patternParts {
 		if strings.HasPrefix(pp, "*") {
 			if len(pp) > 1 {
-				raw := strings.Join(pathParts[i:], "/")
-				if unescaped, err := url.PathUnescape(raw); err == nil {
-					params[pp[1:]] = unescaped
-				} else {
-					params[pp[1:]] = raw
-				}
+				params[pp[1:]] = strings.Join(pathParts[i:], "/")
 			}
 			return true, params
 		} else if strings.HasPrefix(pp, ":") {
-			// Dynamic segment :slug
-			raw := pathParts[i]
-			if unescaped, err := url.PathUnescape(raw); err == nil {
-				params[pp[1:]] = unescaped
-			} else {
-				params[pp[1:]] = raw
-			}
+			// Dynamic segment :slug (already single-unescaped by net/http in req.URL.Path)
+			params[pp[1:]] = pathParts[i]
 		} else if pp != pathParts[i] {
 			return false, nil
 		}

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/misbakhul29/goks/pkg/action"
+	"github.com/misbakhul29/goks/pkg/auth"
 )
 
 func init() {
@@ -242,5 +243,173 @@ func TestAction_SafeRedirectTarget(t *testing.T) {
 	}
 	if loc := recBad.Header().Get("Location"); loc != "/" {
 		t.Fatalf("expected open redirect to be sanitized to /, got %q", loc)
+	}
+}
+
+func TestAction_AuthAndSessionHelpers(t *testing.T) {
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/__goks_action", nil)
+
+	ctx := &action.Context{
+		Request:  req,
+		Response: rec,
+	}
+
+	if ctx.IsAuthenticated() {
+		t.Fatal("expected unauthenticated initially")
+	}
+
+	testUser := &auth.User{
+		ID:    42,
+		Email: "action_user@example.com",
+		Roles: []string{"editor"},
+	}
+
+	sess, err := ctx.Login(testUser)
+	if err != nil {
+		t.Fatalf("Login failed: %v", err)
+	}
+	if sess == nil || sess.Token == "" {
+		t.Fatal("expected non-empty session token")
+	}
+
+	// Immediate state sync test: ctx.User() must be available immediately without reload
+	if !ctx.IsAuthenticated() {
+		t.Fatal("expected ctx.IsAuthenticated() to be true immediately after ctx.Login")
+	}
+	if u := ctx.User(); u == nil || u.Email != "action_user@example.com" {
+		t.Fatalf("expected immediate user action_user@example.com, got %v", u)
+	}
+
+	// Verify cookies set
+	cookies := rec.Result().Cookies()
+	var authCookie *http.Cookie
+	for _, c := range cookies {
+		if c.Name == "goks_session" {
+			authCookie = c
+			break
+		}
+	}
+	if authCookie == nil {
+		t.Fatal("expected goks_session cookie to be set")
+	}
+
+	if !ctx.HasRole("editor") {
+		t.Fatal("expected HasRole('editor') to be true")
+	}
+	if ctx.HasRole("admin") {
+		t.Fatal("expected HasRole('admin') to be false")
+	}
+
+	// Flash test
+	ctx.Flash("notice", "Account activated")
+	var flashCookie *http.Cookie
+	for _, c := range (&http.Response{Header: rec.Header()}).Cookies() {
+		if c.Name == "goks_flash_notice" {
+			flashCookie = c
+			break
+		}
+	}
+	if flashCookie == nil {
+		t.Fatal("expected flash cookie to be set")
+	}
+
+	// Read flash
+	req.AddCookie(flashCookie)
+	if val := ctx.GetFlash("notice"); val != "Account activated" {
+		t.Fatalf("expected 'Account activated', got %q", val)
+	}
+
+	// Logout test
+	ctx.Logout()
+	var loggedOutCookie *http.Cookie
+	for _, c := range (&http.Response{Header: rec.Header()}).Cookies() {
+		if c.Name == "goks_session" && c.MaxAge == -1 {
+			loggedOutCookie = c
+			break
+		}
+	}
+	if loggedOutCookie == nil {
+		t.Fatal("expected logout to clear session cookie with MaxAge=-1")
+	}
+}
+
+func TestAction_CSRF_SecretLengthValidation(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected panic when setting CSRF secret shorter than 32 bytes")
+		}
+	}()
+	action.SetSecret([]byte("too-short-secret"))
+}
+
+func TestAction_CSRF_SessionCookieBinding(t *testing.T) {
+	secret := []byte("this-is-a-very-long-secret-key-32b-min")
+	action.SetSecret(secret)
+	defer action.SetSecret(nil)
+
+	victimSession := "valid_session_cookie_12345"
+	attackerSession := "attacker_session_67890"
+
+	// Token generated for attacker session
+	attackerToken := action.GenerateToken("createItem", attackerSession)
+	// Token generated for victim session
+	victimToken := action.GenerateToken("createItem", victimSession)
+
+	handler := action.Handler()
+
+	form := url.Values{}
+	form.Set("name", "Item")
+
+	// 1. Attacker tries to use attackerToken with victim's session cookie and spoofed _session_key
+	req1 := httptest.NewRequest(http.MethodPost, "http://localhost:3000/__goks_action?name=createItem", strings.NewReader(form.Encode()))
+	req1.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req1.Header.Set("Origin", "http://localhost:3000")
+	req1.Header.Set("X-CSRF-Token", attackerToken)
+	req1.Header.Set("X-Session-Key", attackerSession) // Attacker tries to declare session key
+	req1.AddCookie(&http.Cookie{Name: "goks_session", Value: victimSession})
+
+	rec1 := httptest.NewRecorder()
+	handler.ServeHTTP(rec1, req1)
+
+	if rec1.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden when CSRF token does not match server session cookie, got %d", rec1.Code)
+	}
+
+	// 2. Legitimate request with victimToken matching victim's session cookie
+	req2 := httptest.NewRequest(http.MethodPost, "http://localhost:3000/__goks_action?name=createItem", strings.NewReader(form.Encode()))
+	req2.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req2.Header.Set("Origin", "http://localhost:3000")
+	req2.Header.Set("X-CSRF-Token", victimToken)
+	req2.Header.Set("Referer", "/dashboard")
+	req2.AddCookie(&http.Cookie{Name: "goks_session", Value: victimSession})
+
+	rec2 := httptest.NewRecorder()
+	handler.ServeHTTP(rec2, req2)
+
+	if rec2.Code != http.StatusSeeOther {
+		t.Fatalf("expected 303 See Other for valid session-bound CSRF token, got %d", rec2.Code)
+	}
+}
+
+func TestAction_Panic_DoesNotLeakStackTrace(t *testing.T) {
+	action.Register("panicAction", func(ctx *action.Context) (any, error) {
+		panic("database password was: super_secret_1234")
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "http://localhost:3000/__goks_action?name=panicAction", nil)
+	req.Header.Set("Origin", "http://localhost:3000")
+	rec := httptest.NewRecorder()
+
+	action.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500 status code, got %d", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "super_secret_1234") {
+		t.Fatalf("security violation: response leaked panic details: %s", rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "internal server error") {
+		t.Fatalf("expected generic 'internal server error' response, got: %s", rec.Body.String())
 	}
 }

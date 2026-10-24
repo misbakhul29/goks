@@ -119,11 +119,10 @@ import (
 func ServerConfig() server.Config {
 	return server.Config{
 		Middlewares: []router.MiddlewareFunc{
-			// Built-in middlewares — uncomment to enable:
-			// router.Secure(),             // Security headers (XSS, Clickjacking, etc.)
-			// router.RequestID(),          // Inject X-Request-Id into every request
-			// router.Compress(),           // Gzip compression for supported clients
-			// router.MaxBytes(1 << 20),    // Limit request body to 1MB
+			router.Secure(),             // Security headers (CSP, XSS, Clickjacking, etc.)
+			router.RequestID(),          // Inject X-Request-Id into every request
+			router.MaxBytes(10 << 20),   // Limit request body to 10MB to prevent DoS
+			// router.Compress(),        // Gzip compression for supported clients
 			middleware.Logger(),
 		},
 	}

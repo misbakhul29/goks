@@ -1,6 +1,10 @@
 name: CI
 
 on:
+  # push:
+  #   branches: [main]
+  # pull_request:
+  #   branches: [main]
   workflow_dispatch:
 
 # CI must never read application secrets or upload credentials as artifacts.

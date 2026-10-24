@@ -261,7 +261,7 @@ func (r *Renderer) applyProps(el js.Value, newProps, oldProps Props) {
 	// Remove old props that no longer exist
 	for k := range oldProps {
 		if _, exists := newProps[k]; !exists {
-			if strings.HasPrefix(k, "on") {
+			if strings.HasPrefix(strings.ToLower(k), "on") {
 				event := strings.ToLower(k[2:])
 				if oldJsFn, ok := listeners[event]; ok {
 					el.Call("removeEventListener", event, oldJsFn)
@@ -276,7 +276,7 @@ func (r *Renderer) applyProps(el js.Value, newProps, oldProps Props) {
 
 	// Set new / updated props
 	for k, v := range newProps {
-		if strings.HasPrefix(k, "on") {
+		if strings.HasPrefix(strings.ToLower(k), "on") {
 			event := strings.ToLower(k[2:])
 
 			// Remove old listener if it exists to prevent stacking
@@ -325,7 +325,14 @@ func (r *Renderer) applyProps(el js.Value, newProps, oldProps Props) {
 		} else if k == "innerHTML" {
 			el.Set("innerHTML", fmt.Sprintf("%v", v))
 		} else {
-			el.Call("setAttribute", k, fmt.Sprintf("%v", v))
+			if !IsValidAttributeName(k) {
+				continue
+			}
+			valStr := fmt.Sprintf("%v", v)
+			if isDangerousURLScheme(k, valStr) {
+				valStr = "about:blank"
+			}
+			el.Call("setAttribute", k, valStr)
 		}
 	}
 }

@@ -227,6 +227,22 @@ func TestStaticFileServing_PublicRoot(t *testing.T) {
 	if wDir.Code != 404 {
 		t.Fatalf("expected 404 for directory listing on /public/, got %d", wDir.Code)
 	}
+
+	// Security test: Hidden dotfiles (e.g. .env, .git) must never be served
+	_ = os.WriteFile(filepath.Join(publicDir, ".env"), []byte("SECRET_KEY=12345"), 0600)
+	reqDot := httptest.NewRequest("GET", "/.env", nil)
+	wDot := httptest.NewRecorder()
+	srv.router.ServeHTTP(wDot, reqDot)
+	if strings.Contains(wDot.Body.String(), "SECRET_KEY=12345") {
+		t.Fatalf("security violation: dotfile .env was served from root static handler!")
+	}
+
+	reqDotPublic := httptest.NewRequest("GET", "/public/.env", nil)
+	wDotPublic := httptest.NewRecorder()
+	srv.router.ServeHTTP(wDotPublic, reqDotPublic)
+	if strings.Contains(wDotPublic.Body.String(), "SECRET_KEY=12345") {
+		t.Fatalf("security violation: dotfile .env was served from /public/ handler!")
+	}
 }
 
 func TestServer_HealthAndReady(t *testing.T) {

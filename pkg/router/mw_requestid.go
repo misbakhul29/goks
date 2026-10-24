@@ -28,13 +28,27 @@ func RequestIDFromContext(ctx context.Context) string {
 	return ""
 }
 
+func isValidRequestID(id string) bool {
+	if len(id) < 8 || len(id) > 64 {
+		return false
+	}
+	for i := 0; i < len(id); i++ {
+		c := id[i]
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
 // RequestID is a middleware that injects a unique X-Request-Id header to each request
 // if one is not already present, and makes it available in the response headers.
 func RequestID() MiddlewareFunc {
 	return func(next Handler) Handler {
 		return func(ctx *Context) error {
 			reqID := ctx.Request().Header.Get("X-Request-Id")
-			if reqID == "" {
+			if !isValidRequestID(reqID) {
 				reqID = generateID()
 				ctx.Request().Header.Set("X-Request-Id", reqID)
 			}

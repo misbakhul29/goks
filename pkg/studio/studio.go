@@ -7,7 +7,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -29,6 +31,18 @@ import (
 var validTableName = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
 
 var startTime = time.Now()
+
+func isLoopbackHost(host string) bool {
+	h := host
+	if parsedHost, _, err := net.SplitHostPort(h); err == nil {
+		h = parsedHost
+	}
+	if h == "localhost" || h == "127.0.0.1" || h == "::1" {
+		return true
+	}
+	ip := net.ParseIP(h)
+	return ip != nil && ip.IsLoopback()
+}
 
 // Config configures GoKS Studio.
 type Config struct {
@@ -59,6 +73,24 @@ func (s *Studio) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !s.cfg.DevMode {
 		http.NotFound(w, r)
 		return
+	}
+
+	// SECURITY GUARD: Studio is restricted to loopback interface in development (M2)
+	if !isLoopbackHost(r.Host) {
+		http.Error(w, "Forbidden: DevTools only accessible from loopback interface", http.StatusForbidden)
+		return
+	}
+
+	// Reject cross-site and cross-origin attempts to access Studio APIs
+	if r.Header.Get("Sec-Fetch-Site") == "cross-site" {
+		http.Error(w, "Forbidden: Cross-site access denied", http.StatusForbidden)
+		return
+	}
+	if origin := r.Header.Get("Origin"); origin != "" {
+		if u, err := url.Parse(origin); err != nil || !strings.EqualFold(u.Host, r.Host) {
+			http.Error(w, "Forbidden: Cross-origin access denied", http.StatusForbidden)
+			return
+		}
 	}
 
 	path := strings.TrimPrefix(r.URL.Path, "/__goks")
@@ -117,7 +149,7 @@ func (s *Studio) handleOverview(w http.ResponseWriter, r *http.Request) {
 		"rpc_count":     len(rpcMethods),
 		"tables_count":  len(tables),
 		"dev_mode":      s.cfg.DevMode,
-		"app_dir":       s.cfg.AppDir,
+		"app_dir":       filepath.Base(s.cfg.AppDir),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -362,7 +394,7 @@ func (s *Studio) handleDBTableRows(w http.ResponseWriter, r *http.Request) {
 		var err error
 		rawDB, err = openSQLite(dbPath)
 		if err != nil {
-			http.Error(w, "database file not found or failed to open: "+err.Error(), http.StatusNotFound)
+			http.Error(w, "database file not found or failed to open", http.StatusNotFound)
 			return
 		}
 		defer rawDB.Close()
@@ -372,7 +404,7 @@ func (s *Studio) handleDBTableRows(w http.ResponseWriter, r *http.Request) {
 	var total int
 	countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM "%s"`, tableName)
 	if err := rawDB.QueryRow(countQuery).Scan(&total); err != nil {
-		http.Error(w, "failed to query table count: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, "failed to query table count", http.StatusInternalServerError)
 		return
 	}
 
@@ -380,14 +412,14 @@ func (s *Studio) handleDBTableRows(w http.ResponseWriter, r *http.Request) {
 	selectQuery := fmt.Sprintf(`SELECT * FROM "%s" LIMIT %d OFFSET %d`, tableName, limit, offset)
 	rows, err := rawDB.Query(selectQuery)
 	if err != nil {
-		http.Error(w, "failed to query rows: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, "failed to query rows", http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
 
 	columns, err := rows.Columns()
 	if err != nil {
-		http.Error(w, "failed to inspect columns: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, "failed to inspect columns", http.StatusInternalServerError)
 		return
 	}
 
@@ -497,6 +529,9 @@ func (s *Studio) handleMigrations(w http.ResponseWriter, r *http.Request) {
 
 func (s *Studio) serveDashboardHTML(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none';")
+	w.Header().Set("X-Frame-Options", "DENY")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(dashboardHTML))
 }
@@ -984,6 +1019,16 @@ const dashboardHTML = `<!DOCTYPE html>
       return s + 's';
     }
 
+    function esc(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
     async function loadOverview() {
       try {
         const res = await fetch('/__goks/api/overview');
@@ -1016,7 +1061,7 @@ const dashboardHTML = `<!DOCTYPE html>
         }
         tbody.innerHTML = routes.map(r => {
           let badgeClass = 'badge-get';
-          const m = r.method.toUpperCase();
+          const m = r.method ? r.method.toUpperCase() : 'GET';
           if (m === 'POST') badgeClass = 'badge-post';
           else if (m === 'PUT') badgeClass = 'badge-put';
           else if (m === 'DELETE') badgeClass = 'badge-delete';
@@ -1024,9 +1069,9 @@ const dashboardHTML = `<!DOCTYPE html>
 
           const typeBadge = r.type === 'API Route' ? 'badge-patch' : (r.type === 'Page' ? 'badge-page' : 'badge-pending');
           return '<tr>' +
-            '<td><span class="badge ' + badgeClass + '">' + m + '</span></td>' +
-            '<td><span class="code">' + r.pattern + '</span></td>' +
-            '<td><span class="badge ' + typeBadge + '">' + r.type + '</span></td>' +
+            '<td><span class="badge ' + badgeClass + '">' + esc(m) + '</span></td>' +
+            '<td><span class="code">' + esc(r.pattern) + '</span></td>' +
+            '<td><span class="badge ' + typeBadge + '">' + esc(r.type) + '</span></td>' +
           '</tr>';
         }).join('');
       } catch (e) {
@@ -1048,7 +1093,7 @@ const dashboardHTML = `<!DOCTYPE html>
           actTbody.innerHTML = '<tr><td colspan="2" class="empty-state">No server actions registered</td></tr>';
         } else {
           actTbody.innerHTML = actions.map(function(a) {
-            return '<tr><td><strong>' + a.name + '</strong></td><td><span class="code">' + a.endpoint + '</span></td></tr>';
+            return '<tr><td><strong>' + esc(a.name) + '</strong></td><td><span class="code">' + esc(a.endpoint) + '</span></td></tr>';
           }).join('');
         }
 
@@ -1057,7 +1102,7 @@ const dashboardHTML = `<!DOCTYPE html>
           rpcTbody.innerHTML = '<tr><td colspan="2" class="empty-state">No RPC methods registered</td></tr>';
         } else {
           rpcTbody.innerHTML = rpcList.map(function(m) {
-            return '<tr><td><strong>' + m.method + '</strong></td><td><span class="code">' + m.endpoint + '</span></td></tr>';
+            return '<tr><td><strong>' + esc(m.method) + '</strong></td><td><span class="code">' + esc(m.endpoint) + '</span></td></tr>';
           }).join('');
         }
       } catch (e) {
@@ -1077,8 +1122,15 @@ const dashboardHTML = `<!DOCTYPE html>
         }
 
         list.innerHTML = tables.map(function(t) {
-          return '<div class="table-list-item" onclick="viewTable(\'' + t + '\')"><span>' + t + '</span><span style="font-size:0.75rem; color:var(--text-muted);">→</span></div>';
+          return '<div class="table-list-item" data-table="' + esc(t) + '"><span>' + esc(t) + '</span><span style="font-size:0.75rem; color:var(--text-muted);">→</span></div>';
         }).join('');
+
+        list.onclick = function(e) {
+          const item = e.target.closest('.table-list-item');
+          if (item && item.dataset.table) {
+            viewTable(item.dataset.table);
+          }
+        };
 
         if (tables.length > 0) {
           viewTable(tables[0]);
@@ -1090,7 +1142,7 @@ const dashboardHTML = `<!DOCTYPE html>
 
     async function viewTable(tableName) {
       document.querySelectorAll('.table-list-item').forEach(el => {
-        el.classList.toggle('active', el.textContent.includes(tableName));
+        el.classList.toggle('active', el.dataset.table === tableName);
       });
       document.getElementById('current-table-title').textContent = tableName;
       const statsBadge = document.getElementById('current-table-stats');
@@ -1112,13 +1164,13 @@ const dashboardHTML = `<!DOCTYPE html>
 
         const cols = data.columns;
         let html = '<table><thead><tr>';
-        cols.forEach(c => html += '<th>' + c + '</th>');
+        cols.forEach(c => html += '<th>' + esc(c) + '</th>');
         html += '</tr></thead><tbody>';
 
         data.rows.forEach(r => {
           html += '<tr>';
           cols.forEach(c => {
-            const val = r[c] !== null && r[c] !== undefined ? String(r[c]) : '<span style="color:var(--text-muted);">NULL</span>';
+            const val = r[c] !== null && r[c] !== undefined ? esc(r[c]) : '<span style="color:var(--text-muted);">NULL</span>';
             html += '<td>' + val + '</td>';
           });
           html += '</tr>';
@@ -1141,8 +1193,8 @@ const dashboardHTML = `<!DOCTYPE html>
         }
         tbody.innerHTML = migs.map(function(m) {
           return '<tr>' +
-            '<td><span class="code">' + m.name + '</span></td>' +
-            '<td>' + (m.batch ? m.batch : '-') + '</td>' +
+            '<td><span class="code">' + esc(m.name) + '</span></td>' +
+            '<td>' + (m.batch ? esc(m.batch) : '-') + '</td>' +
             '<td><span class="badge ' + (m.applied ? 'badge-applied' : 'badge-pending') + '">' + (m.applied ? 'APPLIED' : 'PENDING') + '</span></td>' +
           '</tr>';
         }).join('');

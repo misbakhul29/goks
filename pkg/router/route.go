@@ -12,11 +12,17 @@ var CurrentPath = component.NewStore("/")
 
 // Push navigates to a new path programmatically (overridden in WASM).
 var Push = func(path string) {
+	if strings.HasPrefix(path, "//") {
+		return
+	}
 	CurrentPath.Set(path)
 }
 
 // Replace navigates to a new path replacing the current history entry (overridden in WASM).
 var Replace = func(path string) {
+	if strings.HasPrefix(path, "//") {
+		return
+	}
 	CurrentPath.Set(path)
 }
 

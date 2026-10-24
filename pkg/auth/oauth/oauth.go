@@ -49,13 +49,16 @@ type Token struct {
 }
 
 // UserInfo represents a normalized user profile from any OAuth2 provider.
+// Note: When linking accounts by email, applications MUST verify that EmailVerified is true
+// to avoid account takeover vulnerabilities.
 type UserInfo struct {
-	ID        string         `json:"id"`
-	Email     string         `json:"email"`
-	Name      string         `json:"name"`
-	AvatarURL string         `json:"avatar_url"`
-	Provider  string         `json:"provider"`
-	Raw       map[string]any `json:"raw"`
+	ID            string         `json:"id"`
+	Email         string         `json:"email"`
+	EmailVerified bool           `json:"email_verified"`
+	Name          string         `json:"name"`
+	AvatarURL     string         `json:"avatar_url"`
+	Provider      string         `json:"provider"`
+	Raw           map[string]any `json:"raw"`
 }
 
 // Provider represents a configured OAuth2 identity provider.
@@ -269,6 +272,11 @@ func (p *Provider) UserInfo(ctx context.Context, token *Token) (*UserInfo, error
 		if email, ok := raw["email"].(string); ok {
 			info.Email = email
 		}
+		if verified, ok := raw["email_verified"].(bool); ok {
+			info.EmailVerified = verified
+		} else if verifiedStr, ok := raw["email_verified"].(string); ok {
+			info.EmailVerified = strings.ToLower(verifiedStr) == "true"
+		}
 		if name, ok := raw["name"].(string); ok {
 			info.Name = name
 		}
@@ -279,9 +287,6 @@ func (p *Provider) UserInfo(ctx context.Context, token *Token) (*UserInfo, error
 		if id, ok := raw["id"].(float64); ok {
 			info.ID = strconv.FormatInt(int64(id), 10)
 		}
-		if email, ok := raw["email"].(string); ok && email != "" {
-			info.Email = email
-		}
 		if name, ok := raw["name"].(string); ok && name != "" {
 			info.Name = name
 		} else if login, ok := raw["login"].(string); ok {
@@ -291,9 +296,14 @@ func (p *Provider) UserInfo(ctx context.Context, token *Token) (*UserInfo, error
 			info.AvatarURL = avatar
 		}
 
-		// If GitHub user has private email, attempt to fetch from /user/emails
-		if info.Email == "" {
-			info.Email = p.fetchGitHubPrimaryEmail(ctx, token.AccessToken)
+		// Attempt to fetch verified email from /user/emails
+		email, verified := p.fetchGitHubPrimaryEmail(ctx, token.AccessToken)
+		if email != "" {
+			info.Email = email
+			info.EmailVerified = verified
+		} else if email, ok := raw["email"].(string); ok && email != "" {
+			info.Email = email
+			info.EmailVerified = false
 		}
 	default:
 		// Generic mapping
@@ -306,6 +316,15 @@ func (p *Provider) UserInfo(ctx context.Context, token *Token) (*UserInfo, error
 		for _, k := range []string{"email", "mail"} {
 			if val, ok := raw[k].(string); ok {
 				info.Email = val
+				break
+			}
+		}
+		for _, k := range []string{"email_verified", "verified_email", "verified"} {
+			if val, ok := raw[k].(bool); ok {
+				info.EmailVerified = val
+				break
+			} else if s, ok := raw[k].(string); ok && strings.ToLower(s) == "true" {
+				info.EmailVerified = true
 				break
 			}
 		}
@@ -326,10 +345,10 @@ func (p *Provider) UserInfo(ctx context.Context, token *Token) (*UserInfo, error
 	return info, nil
 }
 
-func (p *Provider) fetchGitHubPrimaryEmail(ctx context.Context, token string) string {
+func (p *Provider) fetchGitHubPrimaryEmail(ctx context.Context, token string) (string, bool) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.github.com/user/emails", nil)
 	if err != nil {
-		return ""
+		return "", false
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
@@ -337,12 +356,12 @@ func (p *Provider) fetchGitHubPrimaryEmail(ctx context.Context, token string) st
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
-		return ""
+		return "", false
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return ""
+		return "", false
 	}
 
 	var emails []struct {
@@ -352,18 +371,23 @@ func (p *Provider) fetchGitHubPrimaryEmail(ctx context.Context, token string) st
 	}
 
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<18)).Decode(&emails); err != nil {
-		return ""
+		return "", false
 	}
 
+	// Prioritize primary verified email
 	for _, e := range emails {
 		if e.Primary && e.Verified {
-			return e.Email
+			return e.Email, true
 		}
 	}
-	if len(emails) > 0 {
-		return emails[0].Email
+	// Fallback to any verified email
+	for _, e := range emails {
+		if e.Verified {
+			return e.Email, true
+		}
 	}
-	return ""
+	// Never return unverified email (M6)
+	return "", false
 }
 
 // GenerateState produces a cryptographically secure, URL-safe random state token.

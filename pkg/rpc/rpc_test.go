@@ -60,16 +60,38 @@ func TestRPC_Success(t *testing.T) {
 func TestRPC_CrossOrigin_Forbidden(t *testing.T) {
 	handler := rpc.Handler()
 
-	body, _ := json.Marshal(GreetInput{Name: "Attacker"})
-	req := httptest.NewRequest(http.MethodPost, "/__goks_rpc?method=greet", bytes.NewReader(body))
-	req.Host = "myapp.com"
-	req.Header.Set("Origin", "http://evil.com")
-	rec := httptest.NewRecorder()
+	tests := []struct {
+		name         string
+		origin       string
+		secFetchSite string
+		want         int
+	}{
+		{name: "different domain", origin: "http://evil.com", want: http.StatusForbidden},
+		{name: "suffix bypass attempt", origin: "http://myapp.com.evil.com", want: http.StatusForbidden},
+		{name: "prefix bypass attempt", origin: "http://evil-myapp.com", want: http.StatusForbidden},
+		{name: "cross-site Sec-Fetch-Site", secFetchSite: "cross-site", want: http.StatusForbidden},
+		{name: "same origin valid", origin: "http://myapp.com", want: http.StatusOK},
+	}
 
-	handler.ServeHTTP(rec, req)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body, _ := json.Marshal(GreetInput{Name: "Tester"})
+			req := httptest.NewRequest(http.MethodPost, "http://myapp.com/__goks_rpc?method=greet", bytes.NewReader(body))
+			req.Host = "myapp.com"
+			if tt.origin != "" {
+				req.Header.Set("Origin", tt.origin)
+			}
+			if tt.secFetchSite != "" {
+				req.Header.Set("Sec-Fetch-Site", tt.secFetchSite)
+			}
+			rec := httptest.NewRecorder()
 
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("expected 403 Forbidden for cross-origin RPC, got %d", rec.Code)
+			handler.ServeHTTP(rec, req)
+
+			if rec.Code != tt.want {
+				t.Fatalf("expected status %d, got %d: %s", tt.want, rec.Code, rec.Body.String())
+			}
+		})
 	}
 }
 

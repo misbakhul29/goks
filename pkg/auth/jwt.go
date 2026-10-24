@@ -82,6 +82,22 @@ func (j *JWT) Verify(token string) (*JWTClaims, error) {
 		return nil, fmt.Errorf("goks/auth: jwt: malformed token")
 	}
 
+	// Decode and verify header
+	headerBytes, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return nil, fmt.Errorf("goks/auth: jwt: invalid header encoding")
+	}
+	var header struct {
+		Alg string `json:"alg"`
+		Typ string `json:"typ"`
+	}
+	if err := json.Unmarshal(headerBytes, &header); err != nil {
+		return nil, fmt.Errorf("goks/auth: jwt: invalid header: %w", err)
+	}
+	if header.Alg != "HS256" {
+		return nil, fmt.Errorf("goks/auth: jwt: unsupported algorithm %q", header.Alg)
+	}
+
 	// Verify signature
 	expected := j.sign(parts[0] + "." + parts[1])
 	if !hmac.Equal([]byte(expected), []byte(parts[2])) {

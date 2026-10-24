@@ -2,9 +2,14 @@
 package router
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/url"
+	"strings"
+	"sync"
+	"time"
 )
 
 // Context wraps http.ResponseWriter and *http.Request with a rich API.
@@ -12,12 +17,28 @@ type Context struct {
 	w       http.ResponseWriter
 	r       *http.Request
 	params  map[string]string
+	store   map[string]any
 	status  int
 	written bool
 }
 
 func newContext(w http.ResponseWriter, r *http.Request, params map[string]string) *Context {
-	return &Context{w: w, r: r, params: params, status: http.StatusOK}
+	return &Context{
+		w:      w,
+		r:      r,
+		params: params,
+		status: http.StatusOK,
+	}
+}
+
+// NewTestContext creates a Context instance for testing handlers and middleware.
+func NewTestContext(w http.ResponseWriter, r *http.Request) *Context {
+	return &Context{
+		w:      w,
+		r:      r,
+		params: make(map[string]string),
+		status: http.StatusOK,
+	}
 }
 
 // Param returns a URL path parameter by name.
@@ -45,6 +66,22 @@ func (c *Context) Header(key string) string {
 func (c *Context) SetHeader(key, value string) *Context {
 	c.w.Header().Set(key, value)
 	return c
+}
+
+// Set saves arbitrary data in the request context store.
+func (c *Context) Set(key string, val any) {
+	if c.store == nil {
+		c.store = make(map[string]any)
+	}
+	c.store[key] = val
+}
+
+// Get retrieves arbitrary data from the request context store.
+func (c *Context) Get(key string) any {
+	if c.store == nil {
+		return nil
+	}
+	return c.store[key]
 }
 
 // Status sets the HTTP response status code (chainable).
@@ -154,13 +191,130 @@ func (c *Context) Redirect(url string, code ...int) error {
 	return nil
 }
 
+// Flash stores a one-time flash message in a cookie for the given key.
+func (c *Context) Flash(key, val string) {
+	cookieName := "goks_flash_" + sanitizeKey(key)
+	encoded := base64.RawURLEncoding.EncodeToString([]byte(val))
+	secure := c.r != nil && (c.r.TLS != nil || c.r.Header.Get("X-Forwarded-Proto") == "https")
+
+	http.SetCookie(c.w, &http.Cookie{
+		Name:     cookieName,
+		Value:    encoded,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+// GetFlash retrieves and clears the one-time flash message for the given key.
+func (c *Context) GetFlash(key string) string {
+	if c.r == nil {
+		return ""
+	}
+	cookieName := "goks_flash_" + sanitizeKey(key)
+	cookie, err := c.r.Cookie(cookieName)
+	if err != nil || cookie.Value == "" {
+		return ""
+	}
+
+	if c.w != nil {
+		secure := c.r != nil && (c.r.TLS != nil || c.r.Header.Get("X-Forwarded-Proto") == "https")
+		http.SetCookie(c.w, &http.Cookie{
+			Name:     cookieName,
+			Value:    "",
+			Path:     "/",
+			Expires:  time.Unix(0, 0),
+			MaxAge:   -1,
+			HttpOnly: true,
+			Secure:   secure,
+			SameSite: http.SameSiteLaxMode,
+		})
+	}
+
+	decoded, err := base64.RawURLEncoding.DecodeString(cookie.Value)
+	if err != nil {
+		return ""
+	}
+	return string(decoded)
+}
+
+// RedirectIntended redirects to the saved intended URL from cookie,
+// or to fallbackURL if none or invalid.
+func (c *Context) RedirectIntended(fallbackURL string, code ...int) error {
+	if fallbackURL == "" {
+		fallbackURL = "/"
+	}
+	target := fallbackURL
+	if c.r != nil {
+		if cookie, err := c.r.Cookie("goks_intended_url"); err == nil && cookie.Value != "" {
+			if c.w != nil {
+				secure := c.r.TLS != nil || c.r.Header.Get("X-Forwarded-Proto") == "https"
+				http.SetCookie(c.w, &http.Cookie{
+					Name:     "goks_intended_url",
+					Value:    "",
+					Path:     "/",
+					Expires:  time.Unix(0, 0),
+					MaxAge:   -1,
+					HttpOnly: true,
+					Secure:   secure,
+					SameSite: http.SameSiteLaxMode,
+				})
+			}
+			if raw, err := base64.RawURLEncoding.DecodeString(cookie.Value); err == nil {
+				candidate := string(raw)
+				if isSafeInternalPath(candidate) {
+					target = candidate
+				}
+			}
+		}
+	}
+	return c.Redirect(target, code...)
+}
+
+var (
+	resolverMu       sync.RWMutex
+	authUserResolver func(r *http.Request) any
+)
+
+// RegisterAuthUserResolver registers a resolver function for AuthUser().
+func RegisterAuthUserResolver(fn func(r *http.Request) any) {
+	resolverMu.Lock()
+	defer resolverMu.Unlock()
+	authUserResolver = fn
+}
+
+// AuthUser returns the authenticated user (if any) via the registered resolver.
+func (c *Context) AuthUser() any {
+	resolverMu.RLock()
+	fn := authUserResolver
+	resolverMu.RUnlock()
+
+	if fn == nil || c.r == nil {
+		return nil
+	}
+	return fn(c.r)
+}
+
 // Bind decodes a JSON request body into v.
+// Body reading is bounded to 10MB to protect against unbounded memory exhaustion.
 func (c *Context) Bind(v any) error {
 	if c.r.Body == nil {
 		return io.EOF
 	}
 	defer c.r.Body.Close()
-	return json.NewDecoder(c.r.Body).Decode(v)
+	return json.NewDecoder(io.LimitReader(c.r.Body, 10<<20)).Decode(v)
+}
+
+// BindStrict decodes a JSON request body into v, rejecting unknown fields to prevent mass assignment (L6).
+func (c *Context) BindStrict(v any) error {
+	if c.r.Body == nil {
+		return io.EOF
+	}
+	defer c.r.Body.Close()
+	dec := json.NewDecoder(io.LimitReader(c.r.Body, 10<<20))
+	dec.DisallowUnknownFields()
+	return dec.Decode(v)
 }
 
 // APIError represents the standard error response payload for API routes.
@@ -195,4 +349,24 @@ func (c *Context) Method() string {
 // Path returns the URL path of the request.
 func (c *Context) Path() string {
 	return c.r.URL.Path
+}
+
+func sanitizeKey(s string) string {
+	return strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-' {
+			return r
+		}
+		return '_'
+	}, s)
+}
+
+func isSafeInternalPath(target string) bool {
+	if target == "" || strings.ContainsAny(target, "\r\n") || !strings.HasPrefix(target, "/") || strings.HasPrefix(target, "//") || strings.Contains(target, `\`) {
+		return false
+	}
+	u, err := url.Parse(target)
+	if err != nil {
+		return false
+	}
+	return u.Host == "" && u.Scheme == ""
 }

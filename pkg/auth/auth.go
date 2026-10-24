@@ -5,7 +5,9 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -25,6 +27,30 @@ type Session struct {
 	Token     string
 	User      *User
 	ExpiresAt time.Time
+}
+
+// LoginOption configures session creation behavior.
+type LoginOption func(*loginConfig)
+
+type loginConfig struct {
+	ttl        time.Duration
+	hasTTL     bool
+	rememberMe bool
+}
+
+// WithTTL sets a custom TTL duration for the session.
+func WithTTL(ttl time.Duration) LoginOption {
+	return func(c *loginConfig) {
+		c.ttl = ttl
+		c.hasTTL = true
+	}
+}
+
+// WithRememberMe specifies if the session should persist across browser restarts (default: 30 days).
+func WithRememberMe(remember bool) LoginOption {
+	return func(c *loginConfig) {
+		c.rememberMe = remember
+	}
 }
 
 // Manager handles session storage and authentication.
@@ -63,7 +89,22 @@ func (m *Manager) Close() {
 
 // Login creates a new session for the given user and sets a cookie.
 // It invalidates any existing session token from the request to prevent session fixation.
-func (m *Manager) Login(w http.ResponseWriter, r *http.Request, user *User) (*Session, error) {
+func (m *Manager) Login(w http.ResponseWriter, r *http.Request, user *User, opts ...LoginOption) (*Session, error) {
+	if w == nil || r == nil {
+		return nil, errors.New("auth: response writer and request cannot be nil")
+	}
+	if user == nil {
+		return nil, errors.New("auth: cannot create session for nil user")
+	}
+
+	cfg := loginConfig{ttl: m.ttl}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	if cfg.rememberMe && !cfg.hasTTL {
+		cfg.ttl = 30 * 24 * time.Hour
+	}
+
 	if oldCookie, err := r.Cookie("goks_session"); err == nil && oldCookie.Value != "" {
 		m.mu.Lock()
 		delete(m.sessions, oldCookie.Value)
@@ -78,17 +119,30 @@ func (m *Manager) Login(w http.ResponseWriter, r *http.Request, user *User) (*Se
 	sess := &Session{
 		Token:     token,
 		User:      user,
-		ExpiresAt: time.Now().Add(m.ttl),
+		ExpiresAt: time.Now().Add(cfg.ttl),
 	}
 
 	m.mu.Lock()
+	const defaultMaxSessions = 100000
+	if len(m.sessions) >= defaultMaxSessions {
+		now := time.Now()
+		for k, s := range m.sessions {
+			if now.After(s.ExpiresAt) {
+				delete(m.sessions, k)
+			}
+		}
+		if len(m.sessions) >= defaultMaxSessions {
+			m.mu.Unlock()
+			return nil, errors.New("auth: maximum active sessions reached")
+		}
+	}
 	m.sessions[token] = sess
 	m.mu.Unlock()
 
 	// Set Secure flag if the request is over HTTPS (direct TLS or behind a reverse proxy).
 	secure := r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
 
-	http.SetCookie(w, &http.Cookie{
+	cookie := &http.Cookie{
 		Name:     "goks_session",
 		Value:    token,
 		Path:     "/",
@@ -96,30 +150,61 @@ func (m *Manager) Login(w http.ResponseWriter, r *http.Request, user *User) (*Se
 		HttpOnly: true,
 		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
-	})
+	}
+	if cfg.rememberMe {
+		cookie.MaxAge = int(cfg.ttl.Seconds())
+	}
 
+	http.SetCookie(w, cookie)
+	reqCtx := r.Context()
+	if reqCtx == nil {
+		reqCtx = context.Background()
+	}
+	triggerLoginHooks(reqCtx, user, r)
 	return sess, nil
 }
 
 // Logout invalidates the session and clears the cookie.
 func (m *Manager) Logout(w http.ResponseWriter, r *http.Request) {
-	cookie, err := r.Cookie("goks_session")
-	if err == nil {
-		m.mu.Lock()
-		delete(m.sessions, cookie.Value)
-		m.mu.Unlock()
+	if w == nil {
+		return
 	}
+	var user *User
+	if r != nil {
+		if cookie, err := r.Cookie("goks_session"); err == nil {
+			m.mu.Lock()
+			if sess, ok := m.sessions[cookie.Value]; ok {
+				user = sess.User
+				delete(m.sessions, cookie.Value)
+			}
+			m.mu.Unlock()
+		}
+	}
+	secure := r != nil && (r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https")
 	http.SetCookie(w, &http.Cookie{
-		Name:    "goks_session",
-		Value:   "",
-		Path:    "/",
-		Expires: time.Unix(0, 0),
-		MaxAge:  -1,
+		Name:     "goks_session",
+		Value:    "",
+		Path:     "/",
+		Expires:  time.Unix(0, 0),
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
 	})
+	if user != nil {
+		var reqCtx context.Context = context.Background()
+		if r != nil && r.Context() != nil {
+			reqCtx = r.Context()
+		}
+		triggerLogoutHooks(reqCtx, user, r)
+	}
 }
 
 // SessionFromRequest retrieves the session from the request cookie.
 func (m *Manager) SessionFromRequest(r *http.Request) (*Session, bool) {
+	if r == nil {
+		return nil, false
+	}
 	cookie, err := r.Cookie("goks_session")
 	if err != nil {
 		return nil, false
@@ -141,18 +226,39 @@ type contextKey string
 
 const sessionKey contextKey = "goks_session"
 
+// ContextWithSession injects the authenticated session into the context.
+func ContextWithSession(ctx context.Context, sess *Session) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, sessionKey, sess)
+}
+
 // Required is middleware that requires an authenticated session.
-// Redirects to /login if not authenticated.
-func Required() router.MiddlewareFunc {
+// If unauthenticated, it records the current request URI as the intended destination and redirects to /login (or custom path).
+func Required(redirectTo ...string) router.MiddlewareFunc {
+	loginURL := "/login"
+	if len(redirectTo) > 0 && redirectTo[0] != "" {
+		loginURL = redirectTo[0]
+	}
+
 	return func(next router.Handler) router.Handler {
 		return func(ctx *router.Context) error {
 			sess, ok := Default.SessionFromRequest(ctx.Request())
 			if !ok {
-				return ctx.Redirect("/login", http.StatusFound)
+				// API/JSON content-negotiation: return 401 instead of redirecting
+				if strings.Contains(ctx.Header("Accept"), "application/json") || strings.HasPrefix(ctx.Path(), "/api/") {
+					return ctx.Status(http.StatusUnauthorized).JSON(map[string]string{
+						"error": "authentication required",
+					})
+				}
+				if ctx.Request() != nil && ctx.Request().Method == http.MethodGet && ctx.Request().URL != nil {
+					SetIntendedURL(ctx.Response(), ctx.Request(), ctx.Request().URL.RequestURI())
+				}
+				return ctx.Redirect(loginURL, http.StatusFound)
 			}
-			// Store user in request context using SetRequest (safe, no pointer deref).
 			req := ctx.Request().WithContext(
-				context.WithValue(ctx.Request().Context(), sessionKey, sess),
+				ContextWithSession(ctx.Request().Context(), sess),
 			)
 			ctx.SetRequest(req)
 			return next(ctx)
@@ -160,14 +266,38 @@ func Required() router.MiddlewareFunc {
 	}
 }
 
-// CurrentUser retrieves the authenticated user from the request context.
+// Guest is middleware that ensures the user is NOT authenticated.
+// If the user is authenticated, it redirects to redirectTo (defaults to "/dashboard").
+func Guest(redirectTo ...string) router.MiddlewareFunc {
+	dest := "/dashboard"
+	if len(redirectTo) > 0 && redirectTo[0] != "" {
+		dest = redirectTo[0]
+	}
+
+	return func(next router.Handler) router.Handler {
+		return func(ctx *router.Context) error {
+			if _, ok := Default.SessionFromRequest(ctx.Request()); ok {
+				return ctx.Redirect(dest, http.StatusFound)
+			}
+			return next(ctx)
+		}
+	}
+}
+
+// CurrentUser retrieves the authenticated user from the request context or session cookie.
 // Returns nil if not authenticated.
 func CurrentUser(r *http.Request) *User {
-	sess, ok := r.Context().Value(sessionKey).(*Session)
-	if !ok || sess == nil {
+	if r == nil {
 		return nil
 	}
-	return sess.User
+	sess, ok := r.Context().Value(sessionKey).(*Session)
+	if ok && sess != nil {
+		return sess.User
+	}
+	if s, found := Default.SessionFromRequest(r); found && s != nil {
+		return s.User
+	}
+	return nil
 }
 
 // -----------------------------------------------------------------------

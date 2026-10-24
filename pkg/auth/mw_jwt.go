@@ -35,7 +35,7 @@ func JWTMiddleware() router.MiddlewareFunc {
 			token := strings.TrimPrefix(authHeader, "Bearer ")
 			claims, err := j.Verify(token)
 			if err != nil {
-				ctx.Status(http.StatusUnauthorized).JSON(map[string]string{"error": err.Error()})
+				ctx.Status(http.StatusUnauthorized).JSON(map[string]string{"error": "invalid or expired token"})
 				return nil
 			}
 

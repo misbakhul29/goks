@@ -7,9 +7,12 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"github.com/fatih/color"
 )
+
+const tailwindVersion = "v4.3.3"
 
 func ensureTailwindCLI() (string, error) {
 	home, err := os.UserHomeDir()
@@ -21,7 +24,7 @@ func ensureTailwindCLI() (string, error) {
 		return "", err
 	}
 
-	execName := "tailwindcss"
+	execName := fmt.Sprintf("tailwindcss-%s", tailwindVersion)
 	if runtime.GOOS == "windows" {
 		execName += ".exe"
 	}
@@ -31,35 +34,33 @@ func ensureTailwindCLI() (string, error) {
 		return execPath, nil // already downloaded
 	}
 
-	fmt.Print(color.HiBlackString("  Downloading Tailwind CSS Standalone CLI... "))
+	fmt.Print(color.HiBlackString("  Downloading Tailwind CSS Standalone CLI (" + tailwindVersion + ")... "))
 
+	baseURL := fmt.Sprintf("https://github.com/tailwindlabs/tailwindcss/releases/download/%s/tailwindcss-", tailwindVersion)
 	var url string
 	switch runtime.GOOS {
 	case "darwin":
 		if runtime.GOARCH == "arm64" {
-			url = "https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-macos-arm64"
+			url = baseURL + "macos-arm64"
 		} else {
-			url = "https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-macos-x64"
+			url = baseURL + "macos-x64"
 		}
 	case "linux":
 		if runtime.GOARCH == "arm64" {
-			url = "https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-linux-arm64"
+			url = baseURL + "linux-arm64"
 		} else {
-			url = "https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-linux-x64"
+			url = baseURL + "linux-x64"
 		}
 	case "windows":
-		if runtime.GOARCH == "arm64" {
-			url = "https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-windows-arm64.exe"
-		} else {
-			url = "https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-windows-x64.exe"
-		}
+		url = baseURL + "windows-x64.exe"
 	}
 
 	if url == "" {
 		return "", fmt.Errorf("unsupported os/arch for tailwind standalone: %s/%s", runtime.GOOS, runtime.GOARCH)
 	}
 
-	resp, err := http.Get(url)
+	client := &http.Client{Timeout: 5 * time.Minute}
+	resp, err := client.Get(url)
 	if err != nil {
 		return "", err
 	}

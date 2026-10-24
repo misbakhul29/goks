@@ -55,7 +55,15 @@ func generatePage(route string) error {
 	route = strings.TrimPrefix(filepath.ToSlash(filepath.Clean(route)), "/")
 
 	appDir := "app"
-	targetDir := filepath.Join(appDir, route)
+	absApp, err := filepath.Abs(appDir)
+	if err != nil {
+		return fmt.Errorf("failed to resolve app directory: %w", err)
+	}
+
+	targetDir := filepath.Clean(filepath.Join(absApp, filepath.FromSlash(route)))
+	if !strings.HasPrefix(targetDir, absApp+string(filepath.Separator)) && targetDir != absApp {
+		return fmt.Errorf("security violation: target route %q escapes app/ directory", route)
+	}
 
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)

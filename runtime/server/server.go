@@ -85,7 +85,11 @@ func New(cfg Config) *Server {
 // NewDev creates a new development server.
 func NewDev(cfg Config) *DevServer {
 	if cfg.Host == "" {
-		cfg.Host = "0.0.0.0"
+		if cfg.DevMode {
+			cfg.Host = "127.0.0.1"
+		} else {
+			cfg.Host = "0.0.0.0"
+		}
 	}
 	if cfg.Port == 0 {
 		cfg.Port = 3000
@@ -163,8 +167,12 @@ func (s *DevServer) Start() error {
 
 	addr := fmt.Sprintf("%s:%d", s.cfg.Host, s.cfg.Port)
 	srv := &http.Server{
-		Addr:    addr,
-		Handler: s.router,
+		Addr:              addr,
+		Handler:           s.router,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	s.serverMu.Lock()
@@ -338,7 +346,7 @@ func (s *DevServer) setupStandaloneRoutes() {
 	// Catch-all: serve static files from embedded public/ or app shell HTML
 	s.router.GET("/*", func(ctx *router.Context) error {
 		reqPath := ctx.Request().URL.Path
-		if reqPath != "/" && !strings.Contains(reqPath, "..") && publicFS != nil {
+		if reqPath != "/" && !strings.Contains(reqPath, "..") && !isHiddenOrDotPath(reqPath) && publicFS != nil {
 			// Try to open as static file from embedded public/
 			f, err := publicFS.Open(reqPath)
 			if err == nil {
@@ -429,7 +437,7 @@ func (s *DevServer) setupDiskRoutes() {
 	// Catch-all: serve static files from public/ or app shell HTML (SPA mode)
 	s.router.GET("/*", func(ctx *router.Context) error {
 		reqPath := ctx.Request().URL.Path
-		if reqPath != "/" && !strings.Contains(reqPath, "..") {
+		if reqPath != "/" && !strings.Contains(reqPath, "..") && !isHiddenOrDotPath(reqPath) {
 			staticFile := filepath.Join(publicDir, filepath.Clean(reqPath))
 			if rel, err := filepath.Rel(publicDir, staticFile); err == nil && !strings.HasPrefix(rel, "..") {
 				if fi, err := os.Stat(staticFile); err == nil && !fi.IsDir() {
@@ -445,12 +453,25 @@ func (s *DevServer) setupDiskRoutes() {
 	})
 }
 
+func isHiddenOrDotPath(p string) bool {
+	parts := strings.Split(filepath.ToSlash(filepath.Clean(p)), "/")
+	for _, part := range parts {
+		if strings.HasPrefix(part, ".") && part != "." && part != ".." {
+			return true
+		}
+	}
+	return false
+}
+
 // noDirListingFS wraps http.FileSystem to prevent directory listings.
 type noDirListingFS struct {
 	fs http.FileSystem
 }
 
 func (nfs noDirListingFS) Open(path string) (http.File, error) {
+	if isHiddenOrDotPath(path) {
+		return nil, os.ErrNotExist
+	}
 	f, err := nfs.fs.Open(path)
 	if err != nil {
 		return nil, err

@@ -10,14 +10,18 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
 	"sort"
 	"strings"
 	"sync"
 
+	"github.com/misbakhul29/goks/pkg/auth"
 	"github.com/misbakhul29/goks/pkg/component"
+	"github.com/misbakhul29/goks/pkg/rbac"
 )
 
 // Action is a server-side action handler.
@@ -84,6 +88,93 @@ func (c *Context) File(key string) (multipart.File, *multipart.FileHeader, error
 	return c.Request.FormFile(key)
 }
 
+// User returns the authenticated user from the request, or nil if unauthenticated.
+func (c *Context) User() *auth.User {
+	if c.Request == nil {
+		return nil
+	}
+	return auth.CurrentUser(c.Request)
+}
+
+// IsAuthenticated reports whether the current request has an active authenticated session.
+func (c *Context) IsAuthenticated() bool {
+	return c.User() != nil
+}
+
+// Login creates a new session for the given user and sets the auth cookie.
+func (c *Context) Login(user *auth.User, opts ...auth.LoginOption) (*auth.Session, error) {
+	if c.Response == nil || c.Request == nil {
+		return nil, http.ErrNotSupported
+	}
+	sess, err := auth.Default.Login(c.Response, c.Request, user, opts...)
+	if err != nil {
+		return nil, err
+	}
+	c.Request = c.Request.WithContext(auth.ContextWithSession(c.Request.Context(), sess))
+	return sess, nil
+}
+
+// Logout clears the current session and invalidates the session cookie.
+func (c *Context) Logout() {
+	if c.Response != nil && c.Request != nil {
+		auth.Default.Logout(c.Response, c.Request)
+		c.Request = c.Request.WithContext(auth.ContextWithSession(c.Request.Context(), nil))
+	}
+}
+
+// Flash stores a one-time flash message in a cookie for the given key.
+func (c *Context) Flash(key, val string) {
+	if c.Response != nil && c.Request != nil {
+		auth.SetFlash(c.Response, c.Request, key, val)
+	}
+}
+
+// GetFlash retrieves and clears the one-time flash message for the given key.
+func (c *Context) GetFlash(key string) string {
+	if c.Response != nil && c.Request != nil {
+		return auth.GetFlash(c.Response, c.Request, key)
+	}
+	return ""
+}
+
+// RedirectIntended redirects to the previously intended URL if present, or to fallbackURL.
+func (c *Context) RedirectIntended(fallbackURL string, code ...int) (any, error) {
+	statusCode := http.StatusFound
+	if len(code) > 0 {
+		statusCode = code[0]
+	}
+	target := auth.GetIntendedURL(c.Response, c.Request, fallbackURL)
+	if c.Response != nil && c.Request != nil {
+		http.Redirect(c.Response, c.Request, target, statusCode)
+	}
+	return map[string]string{"redirect": target}, nil
+}
+
+// HasRole checks if the authenticated user has any of the specified roles.
+func (c *Context) HasRole(roles ...string) bool {
+	u := c.User()
+	if u == nil {
+		return false
+	}
+	for _, required := range roles {
+		for _, r := range u.Roles {
+			if r == required {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// Can checks if the authenticated user has a specific permission via rbac.Default.
+func (c *Context) Can(perm string) bool {
+	u := c.User()
+	if u == nil {
+		return false
+	}
+	return rbac.Default.UserHas(u, rbac.Permission(perm))
+}
+
 var (
 	registryMu sync.RWMutex
 	actions    = make(map[string]Action)
@@ -93,7 +184,11 @@ var (
 )
 
 // SetSecret sets the HMAC secret used to generate and validate CSRF tokens.
+// Secret must be at least 32 bytes long (panics if non-nil and shorter than 32 bytes).
 func SetSecret(secret []byte) {
+	if secret != nil && len(secret) < 32 {
+		panic("goks/action: CSRF secret must be at least 32 bytes long")
+	}
 	secretMu.Lock()
 	defer secretMu.Unlock()
 	if secret == nil {
@@ -126,7 +221,7 @@ func ValidateToken(actionName, sessionKey, token string) bool {
 	secretMu.RUnlock()
 
 	if len(sec) == 0 {
-		return true
+		return !isProduction()
 	}
 
 	if token == "" {
@@ -135,6 +230,17 @@ func ValidateToken(actionName, sessionKey, token string) bool {
 
 	expected := GenerateToken(actionName, sessionKey)
 	return hmac.Equal([]byte(expected), []byte(token))
+}
+
+func isProduction() bool {
+	env := strings.ToLower(os.Getenv("GOKS_ENV"))
+	if env == "" {
+		env = strings.ToLower(os.Getenv("ENV"))
+	}
+	if env == "" {
+		env = strings.ToLower(os.Getenv("APP_ENV"))
+	}
+	return env == "production" || env == "prod"
 }
 
 // Register registers a named server action that can be invoked via form or WASM client.
@@ -218,7 +324,8 @@ func Handler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if rec := recover(); rec != nil {
-				http.Error(w, fmt.Sprintf("action panic: %v", rec), http.StatusInternalServerError)
+				log.Printf("[GoKS/action] PANIC in action handler: %v", rec)
+				http.Error(w, "internal server error", http.StatusInternalServerError)
 			}
 		}()
 
@@ -228,18 +335,21 @@ func Handler() http.HandlerFunc {
 		}
 
 		// CSRF protection: validate Sec-Fetch-Site, Origin, and Referer.
-		if secSite := r.Header.Get("Sec-Fetch-Site"); secSite == "cross-site" {
+		secSite := r.Header.Get("Sec-Fetch-Site")
+		if secSite == "cross-site" {
 			http.Error(w, "cross-origin actions not allowed", http.StatusForbidden)
 			return
 		}
 
 		origin := r.Header.Get("Origin")
+		referer := r.Header.Get("Referer")
+
 		if origin != "" {
 			if !sameOrigin(r, origin) {
 				http.Error(w, "cross-origin actions not allowed", http.StatusForbidden)
 				return
 			}
-		} else if referer := r.Header.Get("Referer"); referer != "" {
+		} else if referer != "" {
 			if !sameOriginReferer(r, referer) {
 				http.Error(w, "cross-origin actions not allowed", http.StatusForbidden)
 				return
@@ -269,20 +379,39 @@ func Handler() http.HandlerFunc {
 			_ = r.ParseForm()
 		}
 
-		// Validate CSRF token if secret is configured
+		// Validate CSRF token if secret is configured or in production
 		secretMu.RLock()
 		hasSecret := len(csrfSecret) > 0
 		secretMu.RUnlock()
 
-		if hasSecret {
+		if isProduction() && !hasSecret {
+			http.Error(w, "CSRF protection secret required in production", http.StatusForbidden)
+			return
+		}
+
+		if hasSecret || isProduction() {
 			token := r.Header.Get("X-CSRF-Token")
 			if token == "" {
 				token = r.FormValue("_csrf")
 			}
-			sessionKey := r.Header.Get("X-Session-Key")
-			if sessionKey == "" {
-				sessionKey = r.FormValue("_session_key")
+
+			// Prioritize authenticated session cookie to prevent cross-session token reuse
+			sessionKey := ""
+			if sessCookie, err := r.Cookie("goks_session"); err == nil && sessCookie.Value != "" {
+				sessionKey = sessCookie.Value
+			} else {
+				sessionKey = r.Header.Get("X-Session-Key")
+				if sessionKey == "" {
+					sessionKey = r.FormValue("_session_key")
+				}
 			}
+
+			// In production, require CSRF token especially if Origin/Referer headers are omitted
+			if isProduction() && token == "" && origin == "" && referer == "" {
+				http.Error(w, "invalid or missing CSRF token", http.StatusForbidden)
+				return
+			}
+
 			if !ValidateToken(name, sessionKey, token) {
 				http.Error(w, "invalid or missing CSRF token", http.StatusForbidden)
 				return
