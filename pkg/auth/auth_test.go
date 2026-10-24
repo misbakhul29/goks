@@ -43,6 +43,28 @@ func TestNewJWT_SignAndVerify(t *testing.T) {
 	}
 }
 
+func TestNewJWT_AlgorithmValidation(t *testing.T) {
+	secret := "a-very-long-secret-key-that-is-at-least-32-chars-long"
+	j := auth.NewJWT(secret, time.Hour)
+
+	// Create a token with 'none' alg
+	headerNone := "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0" // {"alg":"none","typ":"JWT"}
+	payload := "eyJzdWIiOjEyMywiZXhwIjoyMDAwMDAwMDAwLCJpYXQiOjEwMDAwMDAwMDB9"
+	fakeToken := headerNone + "." + payload + ".fakesig"
+
+	if _, err := j.Verify(fakeToken); err == nil {
+		t.Fatal("expected error when verifying token with 'none' alg, but got nil")
+	}
+
+	// Create a token with RS256 alg
+	headerRS := "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9" // {"alg":"RS256","typ":"JWT"}
+	fakeTokenRS := headerRS + "." + payload + ".fakesig"
+
+	if _, err := j.Verify(fakeTokenRS); err == nil {
+		t.Fatal("expected error when verifying token with RS256 alg, but got nil")
+	}
+}
+
 func TestManager_Login_SecureCookie(t *testing.T) {
 	m := auth.New(time.Hour)
 	rec := httptest.NewRecorder()

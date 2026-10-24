@@ -8,8 +8,8 @@ func Secure() MiddlewareFunc {
 			// Prevents the browser from rendering the page inside a frame/iframe
 			ctx.SetHeader("X-Frame-Options", "DENY")
 
-			// Enables XSS filtering in the browser
-			ctx.SetHeader("X-XSS-Protection", "1; mode=block")
+			// Disables legacy buggy XSS auditor in modern browsers (standard modern best practice)
+			ctx.SetHeader("X-XSS-Protection", "0")
 
 			// Prevents MIME-sniffing
 			ctx.SetHeader("X-Content-Type-Options", "nosniff")
@@ -21,6 +21,9 @@ func Secure() MiddlewareFunc {
 
 			// Controls how much referrer information should be included with requests
 			ctx.SetHeader("Referrer-Policy", "strict-origin-when-cross-origin")
+
+			// Restricts access to sensitive browser features by default
+			ctx.SetHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
 
 			return next(ctx)
 		}

@@ -2,6 +2,7 @@
 package image
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -344,7 +345,22 @@ func (o *Optimizer) fetchLocalImage(src string) (io.ReadCloser, string, error) {
 	return file, mimeType, nil
 }
 
-// fetchRemoteImage securely retrieves a remote image (protects against CWE-918 SSRF).
+// isDomainAllowed checks if the hostname matches any allowed domain (wildcard * is disallowed for security).
+func (o *Optimizer) isDomainAllowed(hostname string) bool {
+	cleanHost := strings.ToLower(strings.TrimSuffix(hostname, "."))
+	for _, domain := range o.cfg.AllowedDomains {
+		cleanDomain := strings.ToLower(strings.TrimSuffix(domain, "."))
+		if cleanDomain == "*" || cleanDomain == "" {
+			continue // Disallow wildcard or empty domain bypass
+		}
+		if cleanHost == cleanDomain || strings.HasSuffix(cleanHost, "."+cleanDomain) {
+			return true
+		}
+	}
+	return false
+}
+
+// fetchRemoteImage securely retrieves a remote image (protects against CWE-918 SSRF and DNS rebinding).
 func (o *Optimizer) fetchRemoteImage(rawURL string) (io.ReadCloser, string, error) {
 	if len(o.cfg.AllowedDomains) == 0 {
 		return nil, "", fmt.Errorf("remote image optimization is disabled (no allowed domains configured)")
@@ -356,31 +372,52 @@ func (o *Optimizer) fetchRemoteImage(rawURL string) (io.ReadCloser, string, erro
 	}
 
 	hostname := parsed.Hostname()
-	domainAllowed := false
-	for _, domain := range o.cfg.AllowedDomains {
-		if domain == "*" || strings.EqualFold(hostname, domain) || strings.HasSuffix(hostname, "."+domain) {
-			domainAllowed = true
-			break
-		}
-	}
-	if !domainAllowed {
+	if !o.isDomainAllowed(hostname) {
 		return nil, "", fmt.Errorf("domain '%s' is not in allowed image domains", hostname)
 	}
 
-	// Resolve IP and verify it is not private/loopback/metadata (SSRF Guard)
-	ips, err := net.LookupIP(hostname)
-	if err != nil || len(ips) == 0 {
-		return nil, "", fmt.Errorf("failed to resolve host: %s", hostname)
+	dialer := &net.Dialer{
+		Timeout:   5 * time.Second,
+		KeepAlive: 30 * time.Second,
 	}
 
-	for _, ip := range ips {
-		if isPrivateOrLoopback(ip) {
-			return nil, "", fmt.Errorf("access to internal/private IP address is forbidden")
-		}
+	// Transport with DNS resolution validation in DialContext to eliminate DNS rebinding
+	transport := &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			host, port, err := net.SplitHostPort(addr)
+			if err != nil {
+				return nil, err
+			}
+			ips, err := net.DefaultResolver.LookupIP(ctx, "ip", host)
+			if err != nil || len(ips) == 0 {
+				return nil, fmt.Errorf("failed to resolve host: %s", host)
+			}
+			for _, ip := range ips {
+				if isPrivateOrLoopback(ip) {
+					return nil, fmt.Errorf("access to internal/private IP address is forbidden: %s", ip)
+				}
+			}
+			// Connect strictly to the verified IP
+			targetAddr := net.JoinHostPort(ips[0].String(), port)
+			return dialer.DialContext(ctx, network, targetAddr)
+		},
 	}
 
 	client := &http.Client{
-		Timeout: 5 * time.Second,
+		Timeout:   5 * time.Second,
+		Transport: transport,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 3 {
+				return fmt.Errorf("too many redirects")
+			}
+			if req.URL.Scheme != "http" && req.URL.Scheme != "https" {
+				return fmt.Errorf("invalid redirect scheme: %s", req.URL.Scheme)
+			}
+			if !o.isDomainAllowed(req.URL.Hostname()) {
+				return fmt.Errorf("redirect domain '%s' is not in allowed image domains", req.URL.Hostname())
+			}
+			return nil
+		},
 	}
 
 	resp, err := client.Get(rawURL)
@@ -399,34 +436,70 @@ func (o *Optimizer) fetchRemoteImage(rawURL string) (io.ReadCloser, string, erro
 		return nil, "", fmt.Errorf("remote response is not an image (Content-Type: %s)", ct)
 	}
 
-	return resp.Body, ct, nil
+	limitedBody := struct {
+		io.Reader
+		io.Closer
+	}{
+		Reader: io.LimitReader(resp.Body, o.cfg.MaxSourceBytes),
+		Closer: resp.Body,
+	}
+
+	return limitedBody, ct, nil
 }
 
 func isPrivateOrLoopback(ip net.IP) bool {
-	if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsInterfaceLocalMulticast() {
+	if ip == nil {
 		return true
 	}
-	// Check IPv4 private ranges
+	if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.IsInterfaceLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
+		return true
+	}
+
+	// Check IPv4 ranges
 	if ip4 := ip.To4(); ip4 != nil {
 		switch {
-		case ip4[0] == 10:
+		case ip4[0] == 0: // 0.0.0.0/8
 			return true
-		case ip4[0] == 172 && ip4[1] >= 16 && ip4[1] <= 31:
+		case ip4[0] == 10: // 10.0.0.0/8
 			return true
-		case ip4[0] == 192 && ip4[1] == 168:
+		case ip4[0] == 127: // 127.0.0.0/8
 			return true
-		case ip4[0] == 169 && ip4[1] == 254: // AWS/cloud metadata address
+		case ip4[0] == 169 && ip4[1] == 254: // 169.254.0.0/16 Link-local / AWS/cloud metadata
 			return true
-		case ip4[0] == 127: // Loopback
+		case ip4[0] == 172 && ip4[1] >= 16 && ip4[1] <= 31: // 172.16.0.0/12
 			return true
-		case ip4[0] == 0:
+		case ip4[0] == 192 && ip4[1] == 168: // 192.168.0.0/16
+			return true
+		case ip4[0] == 100 && (ip4[1]&0xc0) == 64: // 100.64.0.0/10 Carrier-Grade NAT (RFC 6598)
+			return true
+		case ip4[0] == 192 && ip4[1] == 0 && ip4[2] == 0: // 192.0.0.0/24 IETF Protocol Assignments
+			return true
+		case ip4[0] == 192 && ip4[1] == 0 && ip4[2] == 2: // 192.0.2.0/24 TEST-NET-1
+			return true
+		case ip4[0] == 198 && (ip4[1] == 18 || ip4[1] == 19): // 198.18.0.0/15 Benchmarking
+			return true
+		case ip4[0] == 198 && ip4[1] == 51 && ip4[2] == 100: // 198.51.100.0/24 TEST-NET-2
+			return true
+		case ip4[0] == 203 && ip4[1] == 0 && ip4[2] == 113: // 203.0.113.0/24 TEST-NET-3
+			return true
+		case ip4[0] >= 224: // 224.0.0.0/4 Multicast & 240.0.0.0/4 Reserved
 			return true
 		}
 	}
-	// Check IPv6 unique local addresses (fc00::/7)
-	if len(ip) == 16 && (ip[0]&0xfe) == 0xfc {
-		return true
+
+	// Check IPv6 ranges
+	if len(ip) == 16 {
+		// IPv6 unique local addresses (fc00::/7)
+		if (ip[0] & 0xfe) == 0xfc {
+			return true
+		}
+		// IPv6 documentation prefix (2001:db8::/32)
+		if ip[0] == 0x20 && ip[1] == 0x01 && ip[2] == 0x0d && ip[3] == 0xb8 {
+			return true
+		}
 	}
+
 	return false
 }
 

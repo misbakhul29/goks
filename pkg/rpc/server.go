@@ -3,7 +3,9 @@ package rpc
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
+	"net/url"
 	"reflect"
 	"sort"
 	"strings"
@@ -49,11 +51,23 @@ func Handler() http.HandlerFunc {
 			return
 		}
 
-		// Prevent Cross-Site Request Forgery (CSRF) by requiring same-origin
-		origin := r.Header.Get("Origin")
-		if origin != "" && !strings.Contains(origin, r.Host) {
+		// CSRF protection: validate Sec-Fetch-Site, Origin, and Referer.
+		if secSite := r.Header.Get("Sec-Fetch-Site"); secSite == "cross-site" {
 			http.Error(w, "cross-origin RPC not allowed", http.StatusForbidden)
 			return
+		}
+
+		origin := r.Header.Get("Origin")
+		if origin != "" {
+			if !sameOrigin(r, origin) {
+				http.Error(w, "cross-origin RPC not allowed", http.StatusForbidden)
+				return
+			}
+		} else if referer := r.Header.Get("Referer"); referer != "" {
+			if !sameOriginReferer(r, referer) {
+				http.Error(w, "cross-origin RPC not allowed", http.StatusForbidden)
+				return
+			}
 		}
 
 		// Limit RPC payload to 1MB to prevent memory exhaustion DoS
@@ -88,6 +102,7 @@ func Handler() http.HandlerFunc {
 
 		if len(out) == 2 && !out[1].IsNil() {
 			err := out[1].Interface().(error)
+			log.Printf("[GoKS/rpc] error executing %s: %v", name, err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -97,4 +112,57 @@ func Handler() http.HandlerFunc {
 			http.Error(w, "failed to encode response", http.StatusInternalServerError)
 		}
 	}
+}
+
+func sameOrigin(r *http.Request, rawOrigin string) bool {
+	origin, err := url.Parse(rawOrigin)
+	if err != nil || origin.Scheme == "" || origin.Host == "" || origin.User != nil ||
+		origin.Path != "" || origin.RawQuery != "" || origin.Fragment != "" {
+		return false
+	}
+
+	requestScheme := "http"
+	if r.TLS != nil {
+		requestScheme = "https"
+	}
+	if r.URL != nil && r.URL.Scheme != "" {
+		requestScheme = strings.ToLower(r.URL.Scheme)
+	}
+	if !strings.EqualFold(origin.Scheme, requestScheme) {
+		return false
+	}
+
+	requestHost := r.Host
+	if requestHost == "" && r.URL != nil {
+		requestHost = r.URL.Host
+	}
+	requestURL, err := url.Parse(requestScheme + "://" + requestHost)
+	if err != nil {
+		return false
+	}
+
+	return strings.EqualFold(strings.TrimSuffix(origin.Hostname(), "."), strings.TrimSuffix(requestURL.Hostname(), ".")) &&
+		effectivePort(origin) == effectivePort(requestURL)
+}
+
+func effectivePort(u *url.URL) string {
+	if port := u.Port(); port != "" {
+		return port
+	}
+	if strings.EqualFold(u.Scheme, "https") {
+		return "443"
+	}
+	return "80"
+}
+
+func sameOriginReferer(r *http.Request, rawReferer string) bool {
+	if strings.HasPrefix(rawReferer, "/") && !strings.HasPrefix(rawReferer, "//") {
+		return true
+	}
+	refURL, err := url.Parse(rawReferer)
+	if err != nil || refURL.Scheme == "" || refURL.Host == "" {
+		return false
+	}
+	originFromRef := refURL.Scheme + "://" + refURL.Host
+	return sameOrigin(r, originFromRef)
 }

@@ -65,3 +65,42 @@ func TestWS_MaxMessageSizeLimit(t *testing.T) {
 		t.Fatal("expected connection to be closed after exceeding max message size limit")
 	}
 }
+
+func TestWS_HandshakeAuthentication(t *testing.T) {
+	hub := ws.NewHub()
+	hub.Authenticate(func(r *http.Request) (string, error) {
+		token := r.URL.Query().Get("token")
+		if token != "valid-auth-token" {
+			return "", http.ErrNoCookie
+		}
+		return "user-42", nil
+	})
+
+	server := httptest.NewServer(hub.Handler())
+	defer server.Close()
+
+	u, _ := url.Parse(server.URL)
+	header := http.Header{}
+	header.Set("Origin", server.URL)
+
+	// 1. Connection without valid token -> Rejected with 401
+	wsURLUnauth := "ws://" + u.Host + "/?token=invalid"
+	_, resp, err := websocket.DefaultDialer.Dial(wsURLUnauth, header)
+	if err == nil {
+		t.Fatal("expected error dialing without valid auth token")
+	}
+	if resp != nil && resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized, got %d", resp.StatusCode)
+	}
+
+	// 2. Connection with valid token -> Succeeds
+	wsURLAuth := "ws://" + u.Host + "/?token=valid-auth-token"
+	conn, respAuth, err := websocket.DefaultDialer.Dial(wsURLAuth, header)
+	if err != nil {
+		t.Fatalf("expected successful connection with valid token, got error: %v", err)
+	}
+	defer conn.Close()
+	if respAuth.StatusCode != http.StatusSwitchingProtocols {
+		t.Fatalf("expected 101 Switching Protocols, got %d", respAuth.StatusCode)
+	}
+}

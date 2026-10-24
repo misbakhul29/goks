@@ -169,14 +169,22 @@ func renderInitialShell(node *Node, sb *strings.Builder, boundaries *[]boundaryI
 		sb.WriteString(node.Tag)
 
 		for k, v := range node.Props {
-			if strings.HasPrefix(k, "on") || k == "innerHTML" || strings.HasPrefix(k, "__goks") {
+			if isEventProp(k, v) || k == "innerHTML" || strings.HasPrefix(k, "__goks") {
 				continue
 			}
-			if k == "className" {
-				k = "class"
+			attrName := k
+			if attrName == "className" {
+				attrName = "class"
 			}
-			escapedVal := html.EscapeString(fmt.Sprintf("%v", v))
-			sb.WriteString(fmt.Sprintf(` %s="%s"`, k, escapedVal))
+			if !IsValidAttributeName(attrName) {
+				continue
+			}
+			valStr := fmt.Sprintf("%v", v)
+			if isDangerousURLScheme(attrName, valStr) {
+				valStr = "about:blank"
+			}
+			escapedVal := html.EscapeString(valStr)
+			sb.WriteString(fmt.Sprintf(` %s="%s"`, attrName, escapedVal))
 		}
 		sb.WriteString(">")
 

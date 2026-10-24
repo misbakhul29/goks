@@ -1,6 +1,7 @@
 package router
 
 import (
+	"crypto/sha256"
 	"crypto/subtle"
 	"net/http"
 )
@@ -18,7 +19,15 @@ func BasicAuth(users map[string]string) MiddlewareFunc {
 			}
 
 			expectedPass, exists := users[user]
-			if !exists || subtle.ConstantTimeCompare([]byte(pass), []byte(expectedPass)) != 1 {
+			passHash := sha256.Sum256([]byte(pass))
+			var expectedHash [32]byte
+			if exists {
+				expectedHash = sha256.Sum256([]byte(expectedPass))
+			} else {
+				expectedHash = sha256.Sum256([]byte("dummy-pass-constant-time"))
+			}
+
+			if !exists || subtle.ConstantTimeCompare(passHash[:], expectedHash[:]) != 1 {
 				ctx.SetHeader("WWW-Authenticate", `Basic realm="Restricted"`)
 				ctx.Status(http.StatusUnauthorized).Text("Unauthorized")
 				return nil

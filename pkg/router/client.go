@@ -18,6 +18,9 @@ func InitClientRouter() {
 
 	// Override Push for WASM
 	Push = func(path string) {
+		if strings.HasPrefix(path, "//") {
+			return
+		}
 		if HasFileExtension(path) {
 			js.Global().Get("window").Get("location").Set("href", path)
 			return
@@ -28,6 +31,9 @@ func InitClientRouter() {
 
 	// Override Replace for WASM
 	Replace = func(path string) {
+		if strings.HasPrefix(path, "//") {
+			return
+		}
 		if HasFileExtension(path) {
 			js.Global().Get("window").Get("location").Call("replace", path)
 			return
@@ -93,8 +99,8 @@ func InitClientRouter() {
 			}
 			href := hrefAttr.String()
 
-			// Only intercept local links starting with / that are not static file downloads
-			if len(href) > 0 && href[0] == '/' && !HasFileExtension(href) {
+			// Only intercept local links starting with / that are not protocol-relative (//) and not static file downloads
+			if len(href) > 0 && href[0] == '/' && !strings.HasPrefix(href, "//") && !HasFileExtension(href) {
 				e.Call("preventDefault")
 				window.Get("history").Call("pushState", nil, "", href)
 				CurrentPath.Set(href)

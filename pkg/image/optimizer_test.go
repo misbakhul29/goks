@@ -166,6 +166,8 @@ func TestOptimizer_SSRF_Protection(t *testing.T) {
 		"http://127.0.0.1:8080/secret.png",
 		"http://169.254.169.254/latest/meta-data",
 		"http://192.168.1.1/router.png",
+		"http://0.0.0.0:80/app.png",
+		"http://100.64.0.1:80/cgnat.png",
 		"http://evil.com/exploit.png",
 	}
 
@@ -177,6 +179,17 @@ func TestOptimizer_SSRF_Protection(t *testing.T) {
 		if w.Code != http.StatusBadRequest {
 			t.Errorf("expected 400 Bad Request for SSRF target %q, got %d", target, w.Code)
 		}
+	}
+
+	// Test wildcard '*' domain does not bypass protection
+	optWildcard := goksimage.NewOptimizer(goksimage.Config{
+		AllowedDomains: []string{"*"},
+	})
+	reqWildcard := httptest.NewRequest(http.MethodGet, "/__goks_image?url=http://evil.com/exploit.png&w=128", nil)
+	wWildcard := httptest.NewRecorder()
+	optWildcard.ServeHTTP(wWildcard, reqWildcard)
+	if wWildcard.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 Bad Request when '*' wildcard is attempted in AllowedDomains, got %d", wWildcard.Code)
 	}
 }
 

@@ -123,6 +123,19 @@ func (m *Manager) Login(w http.ResponseWriter, r *http.Request, user *User, opts
 	}
 
 	m.mu.Lock()
+	const defaultMaxSessions = 100000
+	if len(m.sessions) >= defaultMaxSessions {
+		now := time.Now()
+		for k, s := range m.sessions {
+			if now.After(s.ExpiresAt) {
+				delete(m.sessions, k)
+			}
+		}
+		if len(m.sessions) >= defaultMaxSessions {
+			m.mu.Unlock()
+			return nil, errors.New("auth: maximum active sessions reached")
+		}
+	}
 	m.sessions[token] = sess
 	m.mu.Unlock()
 

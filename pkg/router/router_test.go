@@ -596,3 +596,121 @@ func TestRouter_ContextStoreAndAuthUser(t *testing.T) {
 		t.Fatal("expected non-nil user with header")
 	}
 }
+
+func TestRouter_NoDoubleURLDecoding(t *testing.T) {
+	r := router.New()
+
+	var capturedSlug string
+	var capturedWildcard string
+
+	r.GET("/files/:slug", func(ctx *router.Context) error {
+		capturedSlug = ctx.Param("slug")
+		return ctx.Text("ok")
+	})
+	r.GET("/archive/*path", func(ctx *router.Context) error {
+		capturedWildcard = ctx.Param("path")
+		return ctx.Text("ok")
+	})
+
+	// 1. Double encoded %252e%252e should NOT decode to ..
+	req := httptest.NewRequest(http.MethodGet, "/files/%252e%252e", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if capturedSlug != "%2e%2e" {
+		t.Errorf("expected '%%2e%%2e' without double-decoding, got %q", capturedSlug)
+	}
+
+	// 2. Normal encoded %20 should single-decode to space
+	req = httptest.NewRequest(http.MethodGet, "/files/hello%20world", nil)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if capturedSlug != "hello world" {
+		t.Errorf("expected 'hello world', got %q", capturedSlug)
+	}
+
+	// 3. Wildcard with double encoded path
+	req = httptest.NewRequest(http.MethodGet, "/archive/%252e%252e/secrets", nil)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if capturedWildcard != "%2e%2e/secrets" {
+		t.Errorf("expected '%%2e%%2e/secrets', got %q", capturedWildcard)
+	}
+}
+
+func TestRouter_BindStrict_MassAssignmentProtection(t *testing.T) {
+	type UpdateUserDTO struct {
+		Name  string `json:"name"`
+		Email string `json:"email"`
+	}
+
+	r := router.New()
+	var bindErr error
+	var boundDTO UpdateUserDTO
+
+	r.POST("/api/user", func(ctx *router.Context) error {
+		bindErr = ctx.BindStrict(&boundDTO)
+		if bindErr != nil {
+			return ctx.Error(http.StatusBadRequest, bindErr.Error())
+		}
+		return ctx.JSON(boundDTO)
+	})
+
+	// 1. Normal valid payload
+	body := strings.NewReader(`{"name":"Alice","email":"alice@example.com"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/user", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d (err: %v)", w.Code, bindErr)
+	}
+
+	// 2. Extra unexpected field (e.g., is_admin attack) should fail with BindStrict
+	evilBody := strings.NewReader(`{"name":"Alice","email":"alice@example.com","is_admin":true}`)
+	req = httptest.NewRequest(http.MethodPost, "/api/user", evilBody)
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 Bad Request for unknown field in BindStrict, got %d", w.Code)
+	}
+}
+
+func TestRouter_RequestID_Validation(t *testing.T) {
+	r := router.New()
+	r.Use(router.RequestID())
+
+	var capturedID string
+	r.GET("/ping", func(ctx *router.Context) error {
+		capturedID = ctx.RequestID()
+		return ctx.Text("pong")
+	})
+
+	// 1. Valid UUID / alphanumeric request ID is preserved
+	validID := "abc-1234-xyz-5678"
+	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+	req.Header.Set("X-Request-Id", validID)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if capturedID != validID {
+		t.Errorf("expected valid ID %q to be preserved, got %q", validID, capturedID)
+	}
+
+	// 2. Invalid request ID with control characters / newlines should be sanitized/replaced
+	maliciousID := "abc\r\nX-Injected: evil"
+	req = httptest.NewRequest(http.MethodGet, "/ping", nil)
+	req.Header.Set("X-Request-Id", maliciousID)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if capturedID == maliciousID {
+		t.Errorf("expected malicious ID with CRLF to be rejected and regenerated")
+	}
+	if strings.Contains(capturedID, "\n") || strings.Contains(capturedID, "\r") {
+		t.Errorf("captured ID must not contain CRLF: %q", capturedID)
+	}
+}

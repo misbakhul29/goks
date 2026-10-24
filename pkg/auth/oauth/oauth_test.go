@@ -208,3 +208,52 @@ func TestOAuth_Exchange_And_UserInfo_Mock(t *testing.T) {
 		t.Errorf("Expected error for invalid code")
 	}
 }
+
+func TestOAuth_EmailVerification_GoogleAndGitHub(t *testing.T) {
+	// 1. Google with email_verified: true
+	srvGoogle := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"sub":            "g-123",
+			"email":          "verified@gmail.com",
+			"email_verified": true,
+		})
+	}))
+	defer srvGoogle.Close()
+
+	pGoogle := NewProvider("google", Endpoints{UserInfoURL: srvGoogle.URL}, Config{})
+	infoGoogle, err := pGoogle.UserInfo(context.Background(), &Token{AccessToken: "token"})
+	if err != nil {
+		t.Fatalf("UserInfo failed: %v", err)
+	}
+	if !infoGoogle.EmailVerified {
+		t.Errorf("Expected EmailVerified = true for Google")
+	}
+
+	// 2. GitHub with /user/emails where only unverified emails exist
+	srvGitHubUnverified := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/user/emails" {
+			// No verified emails!
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{"email": "unverified@attacker.com", "primary": true, "verified": false},
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":    12345,
+			"login": "octocat",
+		})
+	}))
+	defer srvGitHubUnverified.Close()
+
+	pGitHub := NewProvider("github", Endpoints{UserInfoURL: srvGitHubUnverified.URL}, Config{})
+	pGitHub.httpClient = srvGitHubUnverified.Client()
+	// Override transport/URL in test: call fetchGitHubPrimaryEmail logic
+	infoGitHub, err := pGitHub.UserInfo(context.Background(), &Token{AccessToken: "token"})
+	if err != nil {
+		t.Fatalf("UserInfo failed: %v", err)
+	}
+	// With the unverified email rejected, Email should be empty and EmailVerified false
+	if infoGitHub.EmailVerified {
+		t.Errorf("Expected EmailVerified = false for unverified GitHub email")
+	}
+}

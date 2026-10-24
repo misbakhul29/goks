@@ -359,3 +359,71 @@ func TestReconcileChildren(t *testing.T) {
 		t.Errorf("expected 2 remove patches, got %d", removes)
 	}
 }
+
+func TestRenderToString_SecuritySanitization(t *testing.T) {
+	// 1. Attribute name injection attempt should be dropped
+	maliciousAttrNode := component.H("div", component.Props{
+		`foo" onmouseover="alert(1)`: "bar",
+		"data-safe":                  "safe-value",
+	})
+	out := component.RenderToString(maliciousAttrNode)
+	if strings.Contains(out, "onmouseover") {
+		t.Errorf("expected malicious attribute injection to be dropped, got: %s", out)
+	}
+	if !strings.Contains(out, `data-safe="safe-value"`) {
+		t.Errorf("expected valid data-safe attribute to be rendered, got: %s", out)
+	}
+
+	// 2. Event handlers with uppercase or mixed case should not render in SSR
+	eventNode := component.H("button", component.Props{
+		"OnClick": func() {},
+		"ONCLICK": func() {},
+		"once":    "legitimate-attr", // non-function attribute "once" should render
+	})
+	out = component.RenderToString(eventNode)
+	if strings.Contains(out, "OnClick") || strings.Contains(out, "ONCLICK") {
+		t.Errorf("expected event handlers to be omitted from SSR output, got: %s", out)
+	}
+	if !strings.Contains(out, `once="legitimate-attr"`) {
+		t.Errorf("expected non-function 'once' attribute to be rendered, got: %s", out)
+	}
+
+	// 3. Dangerous URL schemes in href, src, action, formaction should be neutralized
+	linkNode := component.H("a", component.Props{
+		"href": "javascript:alert(document.cookie)",
+	}, component.Text("Click me"))
+	out = component.RenderToString(linkNode)
+	if strings.Contains(out, "javascript:") {
+		t.Errorf("expected javascript: URL to be neutralized, got: %s", out)
+	}
+	if !strings.Contains(out, `href="about:blank"`) {
+		t.Errorf("expected href to be replaced with about:blank, got: %s", out)
+	}
+
+	// 4. Case-insensitive and whitespace-padded javascript URL
+	paddedLinkNode := component.H("a", component.Props{
+		"href": "\n\t JavaSCRIPT:alert(1)",
+	})
+	out = component.RenderToString(paddedLinkNode)
+	if strings.Contains(out, "alert(1)") {
+		t.Errorf("expected padded javascript: URL to be neutralized, got: %s", out)
+	}
+
+	// 5. data: scheme on href should be neutralized
+	dataLinkNode := component.H("a", component.Props{
+		"href": "data:text/html,<script>alert(1)</script>",
+	})
+	out = component.RenderToString(dataLinkNode)
+	if strings.Contains(out, "data:text/html") {
+		t.Errorf("expected data: URL on href to be neutralized, got: %s", out)
+	}
+
+	// 6. Safe relative and HTTPS links should remain intact
+	safeLinkNode := component.H("a", component.Props{
+		"href": "https://example.com/login",
+	})
+	out = component.RenderToString(safeLinkNode)
+	if !strings.Contains(out, `href="https://example.com/login"`) {
+		t.Errorf("expected safe HTTPS URL to remain intact, got: %s", out)
+	}
+}

@@ -1,7 +1,5 @@
 package component
 
-import "strings"
-
 // ClientComponent is an interface for components that explicitly declare
 // whether they require client-side WebAssembly hydration.
 type ClientComponent interface {
@@ -39,7 +37,7 @@ func NeedsHydration(node *Node) bool {
 	if node.Props != nil {
 		for k, v := range node.Props {
 			// Any event handler (onClick, onInput, etc.) requires client hydration
-			if strings.HasPrefix(k, "on") && len(k) > 2 && v != nil {
+			if isEventProp(k, v) {
 				return true
 			}
 		}

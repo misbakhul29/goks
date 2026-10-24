@@ -297,12 +297,24 @@ func (c *Context) AuthUser() any {
 }
 
 // Bind decodes a JSON request body into v.
+// Body reading is bounded to 10MB to protect against unbounded memory exhaustion.
 func (c *Context) Bind(v any) error {
 	if c.r.Body == nil {
 		return io.EOF
 	}
 	defer c.r.Body.Close()
-	return json.NewDecoder(c.r.Body).Decode(v)
+	return json.NewDecoder(io.LimitReader(c.r.Body, 10<<20)).Decode(v)
+}
+
+// BindStrict decodes a JSON request body into v, rejecting unknown fields to prevent mass assignment (L6).
+func (c *Context) BindStrict(v any) error {
+	if c.r.Body == nil {
+		return io.EOF
+	}
+	defer c.r.Body.Close()
+	dec := json.NewDecoder(io.LimitReader(c.r.Body, 10<<20))
+	dec.DisallowUnknownFields()
+	return dec.Decode(v)
 }
 
 // APIError represents the standard error response payload for API routes.
