@@ -25,7 +25,6 @@ import (
 	"github.com/misbakhul29/goks/pkg/orm"
 	"github.com/misbakhul29/goks/pkg/router"
 	"github.com/misbakhul29/goks/pkg/rpc"
-	_ "modernc.org/sqlite"
 )
 
 var validTableName = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
