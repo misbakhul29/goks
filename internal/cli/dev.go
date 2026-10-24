@@ -81,6 +81,8 @@ func DevCmd() *cobra.Command {
 			}
 
 			// 2. Compile Tailwind CSS (initial build runs synchronously before server starts)
+			var twCmd *exec.Cmd
+			var twMutex sync.Mutex
 			fmt.Print(color.HiBlackString("  [2/2] Compiling Tailwind CSS... "))
 			start = time.Now()
 			twCLI, err := ensureTailwindCLI()
@@ -104,10 +106,12 @@ func DevCmd() *cobra.Command {
 				}
 
 				// Jalankan watcher Tailwind di background untuk incremental update
+				twMutex.Lock()
+				twCmd = exec.Command(twCLI, "-i", "public/global.css", "-o", ".goks/build/app.css", "--watch")
+				twCmd.Dir = appDir
+				twMutex.Unlock()
 				go func() {
-					tw := exec.Command(twCLI, "-i", "public/global.css", "-o", ".goks/build/app.css", "--watch")
-					tw.Dir = appDir
-					_ = tw.Run()
+					_ = twCmd.Run()
 				}()
 			}
 
@@ -119,8 +123,8 @@ func DevCmd() *cobra.Command {
 				defer childMutex.Unlock()
 
 				if childCmd != nil && childCmd.Process != nil {
-					childCmd.Process.Kill()
-					childCmd.Wait()
+					_ = childCmd.Process.Kill()
+					_ = childCmd.Wait()
 				}
 
 				buildErrorMutex.RLock()
@@ -140,7 +144,12 @@ func DevCmd() *cobra.Command {
 			startChild()
 
 			// 4. File Watcher to trigger rebuilds and restarts
-			w, err := watcher.New(500*time.Millisecond, func(ev watcher.Event) {
+			var buildMu sync.Mutex
+			var w *watcher.Watcher
+			w, err = watcher.New(500*time.Millisecond, func(ev watcher.Event) {
+				buildMu.Lock()
+				defer buildMu.Unlock()
+
 				fmt.Printf("\n%s %s\n", color.YellowString("↻ Change detected:"), ev.Path)
 				start = time.Now()
 				out, err := compileWasmAndServer(appDir, compilerType)
@@ -163,12 +172,12 @@ func DevCmd() *cobra.Command {
 				lr.Reload()
 			})
 			if err == nil {
-				w.Watch(filepath.Join(appDir, "app"))
+				_ = w.Watch(filepath.Join(appDir, "app"))
 				if _, err := os.Stat(filepath.Join(appDir, "public")); err == nil {
-					w.Watch(filepath.Join(appDir, "public"))
+					_ = w.Watch(filepath.Join(appDir, "public"))
 				}
 				if _, err := os.Stat(filepath.Join(appDir, "config")); err == nil {
-					w.Watch(filepath.Join(appDir, "config"))
+					_ = w.Watch(filepath.Join(appDir, "config"))
 				}
 				w.Start()
 			}
@@ -215,32 +224,41 @@ func DevCmd() *cobra.Command {
 				Addr: fmt.Sprintf(":%d", port),
 			}
 
+			cleanup := func() {
+				childMutex.Lock()
+				if childCmd != nil && childCmd.Process != nil {
+					_ = childCmd.Process.Kill()
+				}
+				childMutex.Unlock()
+
+				twMutex.Lock()
+				if twCmd != nil && twCmd.Process != nil {
+					_ = twCmd.Process.Kill()
+				}
+				twMutex.Unlock()
+
+				if w != nil {
+					w.Close()
+				}
+				_ = server.Close()
+			}
+
 			// Handle Ctrl+C gracefully
 			sigChan := make(chan os.Signal, 1)
 			signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 			go func() {
 				<-sigChan
 				fmt.Println(color.YellowString("\n  Stopping server..."))
-				childMutex.Lock()
-				if childCmd != nil && childCmd.Process != nil {
-					childCmd.Process.Kill()
-				}
-				childMutex.Unlock()
-				server.Close()
+				cleanup()
 				os.Exit(0)
 			}()
 
 			if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				cleanup()
 				return err
 			}
 
-			childMutex.Lock()
-			if childCmd != nil && childCmd.Process != nil {
-				childCmd.Process.Kill()
-			}
-			childMutex.Unlock()
-			server.Close()
-
+			cleanup()
 			return nil
 		},
 	}

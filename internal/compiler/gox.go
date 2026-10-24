@@ -282,52 +282,61 @@ func extractAttrExprs(xmlStr string) (string, map[string]string) {
 	count := 0
 
 	for i < len(xmlStr) {
-		if i+1 < len(xmlStr) && xmlStr[i] == '=' && xmlStr[i+1] == '{' {
-			result.WriteByte('=') // keep the '='
-			i++                   // skip '='
+		// Look for = followed by optional whitespace and then {
+		if xmlStr[i] == '=' {
+			j := i + 1
+			for j < len(xmlStr) && (xmlStr[j] == ' ' || xmlStr[j] == '\t' || xmlStr[j] == '\r' || xmlStr[j] == '\n') {
+				j++
+			}
+			if j < len(xmlStr) && xmlStr[j] == '{' {
+				result.WriteByte('=')
 
-			// Collect balanced {…} expression (handles nesting and strings)
-			depth := 0
-			start := i
-			var inQuote byte
-			escaped := false
+				// Collect balanced {…} expression (handles nesting and strings)
+				depth := 0
+				start := j
+				k := j
+				var inQuote byte
+				escaped := false
 
-			for i < len(xmlStr) {
-				ch := xmlStr[i]
-				if inQuote != 0 {
-					if escaped {
-						escaped = false
-					} else if ch == '\\' && inQuote != '`' {
-						escaped = true
-					} else if ch == inQuote {
-						inQuote = 0
-					}
-				} else {
-					if ch == '"' || ch == '\'' || ch == '`' {
-						inQuote = ch
-					} else if ch == '{' {
-						depth++
-					} else if ch == '}' {
-						depth--
-						if depth == 0 {
-							i++
-							break
+				for k < len(xmlStr) {
+					ch := xmlStr[k]
+					if inQuote != 0 {
+						if escaped {
+							escaped = false
+						} else if ch == '\\' && inQuote != '`' {
+							escaped = true
+						} else if ch == inQuote {
+							inQuote = 0
+						}
+					} else {
+						if ch == '"' || ch == '\'' || ch == '`' {
+							inQuote = ch
+						} else if ch == '{' {
+							depth++
+						} else if ch == '}' {
+							depth--
+							if depth == 0 {
+								k++
+								break
+							}
 						}
 					}
+					k++
 				}
-				i++
-			}
-			expr := xmlStr[start:i] // includes surrounding { }
+				expr := xmlStr[start:k] // includes surrounding { }
 
-			key := fmt.Sprintf("GOKSEXPR%d", count)
-			count++
-			placeholders[key] = expr
-			// Write a safe, double-quoted placeholder the XML decoder can handle
-			result.WriteString(`"` + key + `"`)
-		} else {
-			result.WriteByte(xmlStr[i])
-			i++
+				key := fmt.Sprintf("GOKSEXPR%d", count)
+				count++
+				placeholders[key] = expr
+				// Write a safe, double-quoted placeholder the XML decoder can handle
+				result.WriteString(`"` + key + `"`)
+				i = k
+				continue
+			}
 		}
+
+		result.WriteByte(xmlStr[i])
+		i++
 	}
 
 	return result.String(), placeholders
@@ -387,11 +396,40 @@ func normalizeBooleanAttrs(s string) string {
 					i++
 					continue
 				}
+				// Handle balanced expression block inside tag, e.g. {...props} or {foo}
+				if s[i] == '{' {
+					depth := 0
+					start := i
+					for i < n {
+						if s[i] == '{' {
+							depth++
+						} else if s[i] == '}' {
+							depth--
+							if depth == 0 {
+								i++
+								break
+							}
+						}
+						i++
+					}
+					res.WriteString(s[start:i])
+					continue
+				}
+
 				// Start of an attribute name
 				attrStart := i
-				for i < n && (unicode.IsLetter(rune(s[i])) || unicode.IsDigit(rune(s[i])) || s[i] == '_' || s[i] == ':' || s[i] == '-') {
+				for i < n && (unicode.IsLetter(rune(s[i])) || unicode.IsDigit(rune(s[i])) || s[i] == '_' || s[i] == ':' || s[i] == '-' || s[i] == '.' || s[i] == '@' || s[i] == '$') {
 					i++
 				}
+
+				// If no valid attribute name characters were consumed, output the character and advance
+				// to prevent infinite loops.
+				if i == attrStart {
+					res.WriteByte(s[i])
+					i++
+					continue
+				}
+
 				attrName := s[attrStart:i]
 				res.WriteString(attrName)
 
@@ -430,6 +468,22 @@ func normalizeBooleanAttrs(s string) string {
 							res.WriteByte(s[i])
 							i++
 						}
+					} else if i < n && s[i] == '{' {
+						depth := 0
+						start := i
+						for i < n {
+							if s[i] == '{' {
+								depth++
+							} else if s[i] == '}' {
+								depth--
+								if depth == 0 {
+									i++
+									break
+								}
+							}
+							i++
+						}
+						res.WriteString(s[start:i])
 					}
 				} else {
 					// Standalone attribute without = (boolean shorthand)
