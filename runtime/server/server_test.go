@@ -437,3 +437,43 @@ func TestServer_CustomRoutes(t *testing.T) {
 		t.Fatalf("expected JSON body containing ok, got %s", rec.Body.String())
 	}
 }
+
+func TestServer_AppCSS_MIMEType(t *testing.T) {
+	tempDir := t.TempDir()
+	srv := New(Config{
+		AppDir: tempDir,
+	})
+	srv.setupRoutes()
+
+	// 1. Missing app.css should return 404 with Content-Type: text/css to avoid strict MIME checking errors
+	req := httptest.NewRequest("GET", "/app.css", nil)
+	rec := httptest.NewRecorder()
+	srv.Router().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for missing app.css, got %d", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/css") {
+		t.Fatalf("expected Content-Type text/css, got %q", ct)
+	}
+
+	// 2. Existing app.css should return 200 with Content-Type: text/css
+	buildDir := filepath.Join(tempDir, ".goks", "build")
+	if err := os.MkdirAll(buildDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(buildDir, "app.css"), []byte("body{color:red;}"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	req2 := httptest.NewRequest("GET", "/app.css", nil)
+	rec2 := httptest.NewRecorder()
+	srv.Router().ServeHTTP(rec2, req2)
+
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("expected 200 for existing app.css, got %d", rec2.Code)
+	}
+	if ct := rec2.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/css") {
+		t.Fatalf("expected Content-Type text/css, got %q", ct)
+	}
+}
