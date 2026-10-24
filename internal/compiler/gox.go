@@ -129,7 +129,8 @@ func (e *CompileError) Error() string {
 		fmt.Fprintf(&sb, "compile error: %s", e.Message)
 	}
 	if e.Snippet != "" {
-		sb.WriteString("\n" + e.Snippet)
+		sb.WriteString("\n")
+		sb.WriteString(e.Snippet)
 	}
 	return sb.String()
 }
@@ -329,7 +330,9 @@ func extractAttrExprs(xmlStr string) (string, map[string]string) {
 				count++
 				placeholders[key] = expr
 				// Write a safe, double-quoted placeholder the XML decoder can handle
-				result.WriteString(`"` + key + `"`)
+				result.WriteString(`"`)
+				result.WriteString(key)
+				result.WriteString(`"`)
 				i = k
 				continue
 			}
