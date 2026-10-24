@@ -80,28 +80,36 @@ func DevCmd() *cobra.Command {
 				fmt.Printf("%s (%v)\n", color.GreenString("done"), time.Since(start).Round(time.Millisecond))
 			}
 
-			// 2. Start Tailwind compiler in background
+			// 2. Compile Tailwind CSS (initial build runs synchronously before server starts)
 			fmt.Print(color.HiBlackString("  [2/2] Compiling Tailwind CSS... "))
 			start = time.Now()
-			go func() {
-				twCLI, err := ensureTailwindCLI()
-				if err != nil {
-					fmt.Println(color.RedString("Failed to download Tailwind CLI: %v", err))
-					return
-				}
+			twCLI, err := ensureTailwindCLI()
+			if err != nil {
+				fmt.Printf("%s\n", color.RedString("error"))
+				fmt.Println(color.RedString("Failed to download Tailwind CLI: %v", err))
+			} else {
 				buildDir := filepath.Join(appDir, ".goks", "build")
-				os.MkdirAll(buildDir, 0755)
+				_ = os.MkdirAll(buildDir, 0755)
 
-				// Lakukan build awal agar file app.css dijamin ada sebelum server menyala
+				// Lakukan build awal secara sinkron agar file app.css dijamin sudah ada sebelum server menyala
 				initial := exec.Command(twCLI, "-i", "public/global.css", "-o", ".goks/build/app.css")
 				initial.Dir = appDir
-				_ = initial.Run()
+				if out, err := initial.CombinedOutput(); err != nil {
+					fmt.Printf("%s\n", color.YellowString("warning"))
+					if len(out) > 0 {
+						fmt.Println(color.YellowString("Tailwind build warning: %s", string(out)))
+					}
+				} else {
+					fmt.Printf("%s (%v)\n\n", color.GreenString("done"), time.Since(start).Round(time.Millisecond))
+				}
 
-				tw := exec.Command(twCLI, "-i", "public/global.css", "-o", ".goks/build/app.css", "--watch")
-				tw.Dir = appDir
-				_ = tw.Run()
-			}()
-			fmt.Printf("%s (%v)\n\n", color.GreenString("done"), time.Since(start).Round(time.Millisecond))
+				// Jalankan watcher Tailwind di background untuk incremental update
+				go func() {
+					tw := exec.Command(twCLI, "-i", "public/global.css", "-o", ".goks/build/app.css", "--watch")
+					tw.Dir = appDir
+					_ = tw.Run()
+				}()
+			}
 
 			// 3. Start the GoKS Child Server
 			var childCmd *exec.Cmd

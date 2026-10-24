@@ -303,7 +303,9 @@ func (s *DevServer) setupStandaloneRoutes() {
 	s.router.GET("/app.css", func(ctx *router.Context) error {
 		data, err := s.cfg.EmbeddedAssets.ReadFile("app.css")
 		if err != nil {
+			ctx.Response().Header().Set("Content-Type", "text/css; charset=utf-8")
 			ctx.Response().WriteHeader(http.StatusNotFound)
+			ctx.Response().Write([]byte("/* app.css not found */\n"))
 			return nil
 		}
 		ctx.Response().Header().Set("Content-Type", "text/css; charset=utf-8")
@@ -382,6 +384,12 @@ func (s *DevServer) setupDiskRoutes() {
 		cssPath := filepath.Join(s.cfg.AppDir, ".goks", "build", "app.css")
 		if _, err := os.Stat(cssPath); os.IsNotExist(err) {
 			cssPath = filepath.Join(s.cfg.AppDir, "app.css")
+		}
+		if _, err := os.Stat(cssPath); os.IsNotExist(err) {
+			ctx.Response().Header().Set("Content-Type", "text/css; charset=utf-8")
+			ctx.Response().WriteHeader(http.StatusNotFound)
+			ctx.Response().Write([]byte("/* app.css not found */\n"))
+			return nil
 		}
 		ctx.Response().Header().Set("Content-Type", "text/css; charset=utf-8")
 		http.ServeFile(ctx.Response(), ctx.Request(), cssPath)
