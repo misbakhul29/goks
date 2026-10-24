@@ -35,6 +35,30 @@ func (l *Layout) Render() *component.Node {
 	}
 }
 
+func TestValidateDocument_BooleanPropsShorthand(t *testing.T) {
+	gox := `package login
+
+import "github.com/misbakhul29/goks/pkg/component"
+
+type Page struct {
+	component.ComponentBase
+}
+
+func (p *Page) Render() *component.Node {
+	return (
+		<div>
+			<input id="email" name="email" type="email" required class="appearance-none" />
+			<button disabled>Submit</button>
+		</div>
+	)
+}
+`
+	diags := ValidateDocument("file:///app/login/page.gox", gox)
+	if len(diags) > 0 {
+		t.Errorf("expected 0 diagnostics for GOX with boolean props shorthand, got %d: %+v", len(diags), diags)
+	}
+}
+
 func TestValidateDocument_AttrExpr(t *testing.T) {
 	gox := `package app
 

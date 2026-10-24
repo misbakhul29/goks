@@ -9,6 +9,7 @@ import (
 	"io"
 	"regexp"
 	"strings"
+	"unicode"
 
 	"github.com/misbakhul29/goks/internal/compiler"
 )
@@ -135,6 +136,9 @@ func validateJSXContent(jsx string, baseOffset int, fullContent string) []Diagno
 
 	// Sanitize naked & so text like "A & B" doesn't fail XML entity parser
 	sanitizedJSX = sanitizeNakedAmpersands(sanitizedJSX)
+
+	// Sanitize boolean attributes (e.g. required, disabled) so XML decoder doesn't error
+	sanitizedJSX = sanitizeBooleanAttrs(sanitizedJSX)
 
 	// Use XML decoder with strict checking for tag balance
 	d := xml.NewDecoder(strings.NewReader(sanitizedJSX))
@@ -462,4 +466,126 @@ func cleanXMLError(errMsg string) string {
 		return "Malformed JSX/HTML syntax"
 	}
 	return strings.ToUpper(cleaned[:1]) + cleaned[1:]
+}
+
+func sanitizeBooleanAttrs(s string) string {
+	var res strings.Builder
+	res.Grow(len(s))
+	i := 0
+	n := len(s)
+	for i < n {
+		if s[i] == '<' && i+1 < n {
+			if s[i+1] == '!' || s[i+1] == '/' {
+				res.WriteByte(s[i])
+				i++
+				continue
+			}
+			// Opening or self-closing tag
+			res.WriteByte('<')
+			i++
+			// Read tag name
+			for i < n && (unicode.IsLetter(rune(s[i])) || unicode.IsDigit(rune(s[i])) || s[i] == '.' || s[i] == '_' || s[i] == ':' || s[i] == '-') {
+				res.WriteByte(s[i])
+				i++
+			}
+			// Scan attributes until '>'
+			for i < n && s[i] != '>' {
+				if s[i] == ' ' || s[i] == '\t' || s[i] == '\r' || s[i] == '\n' {
+					res.WriteByte(s[i])
+					i++
+					continue
+				}
+				if s[i] == '/' {
+					res.WriteByte(s[i])
+					i++
+					continue
+				}
+				// Handle balanced expression block inside tag, e.g. {...props} or {foo}
+				if s[i] == '{' {
+					depth := 0
+					start := i
+					for i < n {
+						if s[i] == '{' {
+							depth++
+						} else if s[i] == '}' {
+							depth--
+							if depth == 0 {
+								i++
+								break
+							}
+						}
+						i++
+					}
+					res.WriteString(s[start:i])
+					continue
+				}
+
+				// Start of an attribute name
+				attrStart := i
+				for i < n && (unicode.IsLetter(rune(s[i])) || unicode.IsDigit(rune(s[i])) || s[i] == '_' || s[i] == ':' || s[i] == '-' || s[i] == '.' || s[i] == '@' || s[i] == '$') {
+					i++
+				}
+
+				if i == attrStart {
+					res.WriteByte(s[i])
+					i++
+					continue
+				}
+
+				attrName := s[attrStart:i]
+				res.WriteString(attrName)
+
+				// Skip whitespace after attr name
+				wsStart := i
+				for i < n && (s[i] == ' ' || s[i] == '\t' || s[i] == '\r' || s[i] == '\n') {
+					i++
+				}
+				ws := s[wsStart:i]
+
+				if i < n && s[i] == '=' {
+					res.WriteString(ws)
+					res.WriteByte('=')
+					i++
+					// Skip whitespace after =
+					for i < n && (s[i] == ' ' || s[i] == '\t' || s[i] == '\r' || s[i] == '\n') {
+						res.WriteByte(s[i])
+						i++
+					}
+					// Read attribute value
+					if i < n && (s[i] == '"' || s[i] == '\'') {
+						q := s[i]
+						res.WriteByte(q)
+						i++
+						for i < n && s[i] != q {
+							if s[i] == '\\' {
+								res.WriteByte(s[i])
+								i++
+							}
+							if i < n {
+								res.WriteByte(s[i])
+								i++
+							}
+						}
+						if i < n {
+							res.WriteByte(s[i])
+							i++
+						}
+					}
+				} else {
+					// Standalone attribute without = (boolean shorthand)
+					// Rewrite as attrName="" so standard XML decoder can parse it without failing
+					res.WriteString(`=""`)
+					res.WriteString(ws)
+				}
+			}
+			if i < n && s[i] == '>' {
+				res.WriteByte('>')
+				i++
+			}
+		} else {
+			res.WriteByte(s[i])
+			i++
+		}
+	}
+	return res.String()
 }
